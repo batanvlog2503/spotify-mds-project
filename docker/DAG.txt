@@ -1,0 +1,162 @@
+Trong Apache Airflow, DAG là khái niệm cốt lõi nhất.
+
+DAG viết tắt của:
+
+📘 Directed Acyclic Graph
+
+Tách từng chữ:
+
+Từ	Ý nghĩa
+Directed	Có hướng
+Acyclic	Không được tạo vòng lặp
+Graph	Đồ thị gồm các node kết nối nhau
+🧠 Hiểu kiểu đời thường
+
+DAG = bản kế hoạch các bước công việc
+
+Ví dụ:
+
+Lấy dữ liệu → Xử lý → Lưu database
+
+Mỗi bước gọi là:
+
+task
+
+Thứ tự phụ thuộc gọi là:
+
+dependency
+🔥 Ví dụ cực dễ hiểu
+
+Pipeline Spotify của bạn:
+
+Task 1: gọi Spotify API
+        ↓
+Task 2: gửi vào Kafka
+        ↓
+Task 3: lưu MinIO
+        ↓
+Task 4: update PostgreSQL
+
+👉 Đây chính là DAG.
+
+🧩 Vì sao gọi là “Graph”?
+
+Vì Airflow nhìn workflow như sơ đồ:
+
+extract
+   ↓
+transform
+   ↓
+load
+
+Hoặc phức tạp hơn:
+
+        validate
+       ↙       ↘
+extract          clean
+       ↘       ↙
+        load
+🚫 Vì sao “Acyclic”?
+
+Không được có vòng lặp kiểu:
+
+A → B → C → A
+
+Vì:
+
+scheduler sẽ chạy vô tận
+dependency không bao giờ kết thúc
+
+👉 DAG phải có điểm bắt đầu và kết thúc rõ ràng.
+
+🧠 DAG TRONG AIRFLOW THỰC CHẤT LÀ FILE PYTHON
+
+Ví dụ:
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime
+
+dag = DAG(
+    dag_id="spotify_pipeline",
+    start_date=datetime(2026, 1, 1),
+    schedule="@daily"
+)
+
+task_extract = PythonOperator(
+    task_id="extract",
+    python_callable=extract_func,
+    dag=dag
+)
+
+task_load = PythonOperator(
+    task_id="load",
+    python_callable=load_func,
+    dag=dag
+)
+
+task_extract >> task_load
+📌 Phần quan trọng nhất
+task_extract >> task_load
+
+👉 nghĩa là:
+
+extract chạy xong
+→ mới được chạy load
+
+Đây chính là dependency graph.
+
+🖥️ AIRFLOW HIỂN THỊ DAG NHƯ THẾ NÀO?
+
+Trong UI bạn sẽ thấy:
+
+extract → transform → load
+
+dưới dạng graph trực quan.
+
+🧠 Scheduler dùng DAG để làm gì?
+
+Scheduler đọc DAG để biết:
+
+chạy task nào
+chạy lúc nào
+task nào phụ thuộc task nào
+retry bao nhiêu lần
+nếu fail thì sao
+🔥 DAG ≠ TASK
+Khái niệm	Ý nghĩa
+DAG	toàn bộ workflow
+Task	một bước nhỏ trong workflow
+📦 Ví dụ thực tế
+DAG:
+spotify_etl_pipeline
+Tasks:
+1. extract_spotify
+2. send_to_kafka
+3. save_minio
+4. update_postgres
+🎯 Trong hệ thống của bạn
+
+Bạn gần như đang build:
+
+Spotify API
+    ↓
+Kafka Streaming
+    ↓
+ETL Processing
+    ↓
+MinIO Storage
+    ↓
+PostgreSQL Metadata
+
+Toàn bộ flow này sẽ được Airflow quản lý bằng DAG.
+
+🧾 TÓM TẮT DỄ NHỚ
+
+👉 DAG = workflow có thứ tự
+👉 Task = từng bước trong workflow
+👉 Scheduler đọc DAG để điều phối pipeline
+
+🔥 1 câu nhớ nhanh
+
+👉 DAG là “kế hoạch công việc tự động” của Airflow.

@@ -1,0 +1,116 @@
+MinIO là một object storage (kho lưu trữ file dạng S3) chạy local hoặc trên server — hiểu đơn giản: nó giống như “Google Drive / Amazon S3 phiên bản tự host”.
+
+Mình giải thích đúng theo đoạn Docker Compose của bạn:
+
+🧱 1. Service minio
+minio:
+Tên service trong Docker Compose
+Dùng để các container khác gọi nội bộ bằng minio
+📦 2. Image
+image: minio/minio:latest
+Pull bản MinIO mới nhất
+MinIO là hệ thống lưu file object (file, ảnh, video, parquet, json…)
+📛 3. container_name
+container_name: minio
+Đặt tên container là minio
+Chỉ để dễ quản lý
+🔐 4. environment (user/password)
+MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+👉 Đây là tài khoản admin của MinIO:
+
+MINIO_ROOT_USER = username (giống access key)
+MINIO_ROOT_PASSWORD = password (giống secret key)
+
+⚠️ Giống AWS S3:
+
+bạn phải có key mới upload/download được
+🚀 5. command
+command: server /data --console-address ":9001"
+Giải thích:
+📁 server /data
+MinIO sẽ lưu file trong thư mục /data bên trong container
+🖥️ --console-address ":9001"
+mở web UI dashboard ở port 9001
+
+👉 Nghĩa là:
+
+API S3 chạy 9000 (mặc định)
+UI dashboard chạy 9001
+🌐 6. ports (quan trọng nhất)
+ports:
+  - "9001:9001"
+  - "9002:9000"
+Tách ra:
+🖥️ "9001:9001"
+MinIO Console (UI web)
+👉 mở trình duyệt:
+http://localhost:9001
+📦 "9002:9000"
+S3 API endpoint (quan trọng nhất)
+
+👉 dùng để:
+
+upload file
+download file
+connect bằng Python / Spark / Airflow / Kafka pipeline
+
+Ví dụ:
+
+endpoint = "http://localhost:9002"
+🧠 LUỒNG HOẠT ĐỘNG MINIO
+Docker chạy MinIO
+Mở 2 cổng:
+9001 → UI dashboard
+9000 → S3 API (bạn map ra 9002)
+Bạn login UI:
+tạo bucket (giống folder)
+App (Python/Kafka pipeline) upload data vào bucket
+📦 MINIO DÙNG ĐỂ LÀM GÌ TRONG DATA PIPELINE?
+
+Trong hệ thống bạn đang học (Kafka + Python + data streaming), MinIO thường là:
+
+👉 “data lake mini”
+
+Ví dụ pipeline:
+
+Python Producer → Kafka → Processing → MinIO
+
+Hoặc:
+
+Spotify data → Kafka → ETL → MinIO (lưu raw / parquet)
+🪣 KHÁI NIỆM QUAN TRỌNG
+Bucket = folder lớn
+
+Ví dụ:
+
+bucket: spotify-data
+Object = file
+
+Ví dụ:
+
+spotify-data/song_2026_05_18.json
+⚠️ LỖI THƯỜNG GẶP
+1. Không truy cập được UI
+check port 9001
+2. Python không connect được
+sai endpoint (phải là 9002)
+thiếu access key/secret key
+3. Data không lưu
+/data chưa mount volume → mất khi restart
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 MinIO = S3 mini chạy local
+👉 9001 = web UI
+👉 9000 (map ra 9002) = API để app upload/download file
+👉 dùng để lưu dữ liệu Kafka pipeline
+
+🔥 So sánh nhanh
+Tool	Vai trò
+Kafka	truyền dữ liệu realtime
+Kafdrop	xem Kafka
+MinIO	lưu file / data lake
+
+Nếu bạn muốn, mình có thể
+vẽ cho bạn kiến trúc full pipeline Kafka → MinIO → Python ETL để bạn hiểu toàn hệ thống đang chạy như thế nào (cái này nhìn là hiểu ngay flow luôn).

@@ -1,0 +1,71 @@
+                 Docker Compose
+                        ↓
+        ┌──────────────────────────┐
+        │       Zookeeper          │
+        └──────────┬───────────────┘
+                   ↓
+        ┌──────────────────────────┐
+        │         Kafka            │
+        └──────────┬───────────────┘
+                   ↓
+        ┌──────────────────────────┐
+        │        Kafdrop           │
+        │   (Kafka Dashboard)      │
+        └──────────────────────────┘
+
+
+        ┌──────────────────────────┐
+        │        PostgreSQL        │
+        │    (Airflow Metadata)    │
+        └──────────┬───────────────┘
+                   ↓
+        ┌──────────────────────────┐
+        │      airflow-init        │
+        │   setup DB + admin       │
+        └──────────┬───────────────┘
+                   ↓
+        ┌──────────────────────────┐
+        │    airflow-scheduler     │
+        │     đọc DAG + chạy       │
+        └──────────┬───────────────┘
+                   ↓
+        ┌──────────────────────────┐
+        │    airflow-webserver     │
+        │          UI              │
+        └──────────────────────────┘
+
+
+        ┌──────────────────────────┐
+        │          MinIO           │
+        │      Data Lake (S3)      │
+        └──────────────────────────┘
+
+        [ Nguồn Dữ Liệu ] ──(Gửi message)──> [ Kafka ] <──> [ Kafdrop (Web UI theo dõi) ]
+                                       │
+                     (Airflow kích hoạt DAG đọc/ghi dữ liệu)
+                                       │
+                                       ▼
+  [ MinIO (Data Lake/S3) ] ◄──────────────────────► [ Postgres (Dữ liệu đã xử lý) ]
+
+ports
+
+Kafka Broker:
+localhost:29092
+
+Kafka UI:
+http://localhost:9000
+
+Zookeeper:
+localhost:2181
+
+MinIO Console:
+http://localhost:9001
+
+MinIO API:
+http://localhost:9002
+
+Postgres:
+localhost:5432
+
+Airflow:
+http://localhost:8080

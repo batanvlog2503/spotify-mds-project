@@ -1,0 +1,27 @@
+
+
+-- 2. Giá trị phân tích của model này đối với spotify
+-- khi kết nối bảng này lên các công cụ trực quan hóa (
+
+-- phân tích thiết bị để biết người dùng thích nghe nhạc trên mobile, desktop, web hơn
+-- phân tích khu vực nào nghe nhạc nhiều
+-- 3. Cấu hình khuyến nghị trong dbt
+--SQL
+--{{ config(
+--    materialized='table',
+--    schema='gold'
+--) }}
+
+
+-- giá trị phân tích:
+-- 1. Bài nào đang là Trend (thịnh hành): nhìn vào total_plays cao nhất
+-- 2. Bài hát không phải trend, bị bỏ qua nhiều nhâts
+
+--{{ config(
+--    materialized='table',
+--    schema='gold'
+--) }}
+
+-- có thể thêm vào đầu trước Select
+-- dbt tự tạo một phân vùng sạch sẽ dạng SPOTIFY_DB.GOLD.top_songs
+--Kafka (Realtime) ➔ MinIO (Bronze - File JSON) ➔ Airflow (Orchestration) ➔ Snowflake (Bronze Table) ➔ dbt Silver (Cleaned View/Table) ➔ dbt Gold (top_songs Table).

@@ -1,0 +1,165 @@
+airflow-init là một container chỉ chạy 1 lần để khởi tạo Airflow database + admin user. Nó không phải service chạy lâu dài, mà giống kiểu “setup ban đầu” cho hệ thống Airflow.
+
+Mình giải thích từng phần cho bạn:
+
+🧱 1. Service airflow-init
+airflow-init:
+
+👉 Đây là container “khởi tạo hệ thống Airflow”
+
+Không chạy DAG, không xử lý data — chỉ setup.
+
+📦 2. Image
+image: apache/airflow:2.9.3
+Dùng Airflow version 2.9.3
+Đây là full package gồm:
+scheduler
+CLI (airflow db init, airflow users create)
+webserver tools
+📛 3. container_name
+container_name: airflow-init
+Tên container cho dễ debug
+Chỉ chạy 1 lần rồi thường dừng
+🔗 4. depends_on
+depends_on:
+  - postgres
+
+👉 Nghĩa là:
+
+Airflow phải chờ PostgreSQL chạy trước
+Vì Airflow cần database để lưu metadata
+
+⚠️ Nhưng giống Kafka:
+
+chỉ đảm bảo “container start”
+không đảm bảo PostgreSQL đã ready
+⚙️ 5. environment (quan trọng nhất)
+🔹 Load example DAGs
+AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+
+👉 nghĩa là:
+
+không load DAG mẫu (clean system)
+🔹 Kết nối database
+AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+Giải thích:
+
+Airflow cần database để lưu:
+
+DAG runs
+task status
+logs metadata
+scheduling info
+Breakdown:
+Thành phần	Ý nghĩa
+postgresql+psycopg2://	driver PostgreSQL
+${POSTGRES_USER}	user login
+${POSTGRES_PASSWORD}	password
+@postgres	hostname = service postgres trong Docker
+5432	port PostgreSQL
+${POSTGRES_DB}	database name
+
+👉 QUAN TRỌNG:
+
+postgres ở đây KHÔNG phải localhost
+mà là tên service trong Docker network
+🚀 6. entrypoint
+entrypoint: /bin/bash
+
+👉 nghĩa là:
+
+thay vì chạy Airflow mặc định
+container sẽ chạy bash script
+🧠 7. command (trái tim của airflow-init)
+command: >
+  -c "
+  echo 'Waiting for PostgreSQL...' &&
+  sleep 10 &&
+  airflow db init &&
+  airflow db migrate &&
+  airflow users create ...
+Đây là pipeline setup:
+⏳ Bước 1: chờ PostgreSQL
+sleep 10
+
+👉 đơn giản:
+
+đợi DB lên ổn định
+
+⚠️ thực tế tốt hơn là dùng “healthcheck” thay vì sleep
+
+🗄️ Bước 2: init database
+airflow db init
+
+👉 tạo toàn bộ schema Airflow trong PostgreSQL:
+
+tables
+metadata structure
+🔄 Bước 3: migrate DB
+airflow db migrate
+
+👉 cập nhật schema nếu có version mới
+
+👤 Bước 4: tạo admin user
+airflow users create \
+--username ... \
+--role Admin
+
+👉 tạo tài khoản đăng nhập Airflow UI:
+
+username
+password
+email
+role = Admin
+✅ Bước 5: log success
+echo 'Airflow DB initialized successfully.'
+🧠 LUỒNG HOẠT ĐỘNG
+
+Khi bạn chạy docker-compose:
+
+PostgreSQL start
+airflow-init start
+airflow-init:
+chờ DB
+tạo schema
+migrate DB
+tạo admin user
+container kết thúc
+
+👉 Sau đó các service khác mới chạy:
+
+airflow-webserver
+airflow-scheduler
+🧩 VAI TRÒ TRONG HỆ THỐNG AIRFLOW
+Postgres → lưu metadata
+Airflow-init → setup database
+Airflow-webserver → UI
+Airflow-scheduler → chạy DAG
+⚠️ LỖI THƯỜNG GẶP
+1. DB chưa sẵn sàng
+
+→ airflow-init fail
+
+2. Sai connection string
+
+→ không connect được postgres
+
+3. user already exists
+
+→ chạy lại init bị lỗi create user
+
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 airflow-init = “setup installer cho Airflow”
+
+Nó làm 3 việc chính:
+
+Kết nối PostgreSQL
+Tạo database schema
+Tạo admin user
+🔥 1 câu nhớ nhanh
+
+👉 PostgreSQL = nơi lưu
+👉 airflow-init = setup hệ thống
+👉 airflow-webserver = giao diện
+👉 airflow-scheduler = chạy job

@@ -1,0 +1,34 @@
+Giải thích tại sao lại bị lỗi
+Cơ chế hoạt động của image confluentinc/cp-kafka
+Khi container start, entrypoint script chạy theo thứ tự:
+1. entrypoint script (/etc/confluent/docker/run)
+        ↓
+2. dub (Ruby template engine) render các biến môi trường KAFKA_*
+        ↓
+3. Tạo ra file /etc/kafka/kafka.properties
+        ↓
+4. Chạy: kafka-server-start /etc/kafka/kafka.properties
+Tại sao fail trên Windows?
+dub là một tool Ruby dùng để render ERB template. Trên Windows + Docker Desktop, có một bug liên quan đến line endings (CRLF vs LF) và path handling:
+Windows Docker Desktop
+        ↓
+Volume mount dùng Windows path (D:\...)
+        ↓
+dub render template bị lỗi silently
+        ↓
+/etc/kafka/kafka.properties KHÔNG được tạo ra
+        ↓
+kafka-server-start không tìm thấy file → crash
+Tại sao mount file vào lại fix được?
+Khi bạn mount ./kafka/kafka.properties:/etc/kafka/kafka.properties:
+File đã tồn tại sẵn trước khi entrypoint chạy
+        ↓
+dub fail silently (vẫn bị lỗi như cũ)
+        ↓
+Nhưng file /etc/kafka/kafka.properties ĐÃ CÓ RỒI
+        ↓
+kafka-server-start tìm thấy file → chạy được
+Nôm na là: bạn bypass bước generate tự động bị lỗi bằng cách cung cấp sẵn file đó.
+
+Tóm tắt
+LinuxWindows Docker Desktopdub render template✅ OK❌ Fail silentlykafka.properties được tạo✅❌Mount file thủ côngKhông cần✅ Fix được

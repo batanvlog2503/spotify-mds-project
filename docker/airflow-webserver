@@ -1,0 +1,141 @@
+airflow-webserver là giao diện web (UI) của Apache Airflow — nơi bạn mở trình duyệt để xem DAG, chạy workflow, monitor task, debug pipeline.
+
+Hiểu đơn giản:
+👉 đây là “dashboard điều khiển Airflow”
+
+🧱 1. Service airflow-webserver
+airflow-webserver:
+Container chạy Airflow UI server
+Không chạy DAG logic (cái đó là scheduler)
+Chỉ phục vụ giao diện web
+📦 2. Image
+image: apache/airflow:2.9.3
+Dùng cùng version với các container khác
+Tránh mismatch version giữa scheduler / DB / webserver
+📛 3. container_name
+container_name: airflow-webserver
+Tên container để dễ quản lý/log/debug
+🔁 4. restart
+restart: always
+
+👉 nghĩa là:
+
+crash → tự chạy lại
+máy restart → tự bật lại
+🔗 5. depends_on
+depends_on:
+  - airflow-init
+  - airflow-scheduler
+  - postgres
+
+👉 nghĩa là webserver chỉ chạy khi:
+
+1. airflow-init
+DB đã được tạo schema
+2. airflow-scheduler
+scheduler đã chạy (Airflow system “alive”)
+3. postgres
+database sẵn sàng
+
+⚠️ Nhưng lưu ý:
+
+vẫn chỉ đảm bảo container start
+không đảm bảo “ready hoàn toàn”
+⚙️ 6. environment
+🔹 tắt DAG mẫu
+AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+không load example DAGs
+🔹 kết nối database
+AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+👉 webserver cần DB để:
+
+hiển thị DAG runs
+hiển thị task status
+đọc metadata từ scheduler
+📂 7. volumes (rất quan trọng)
+volumes:
+  - ./dags:/opt/airflow/dags
+  - ./logs:/opt/airflow/logs
+  - ./plugins:/opt/airflow/plugins
+📁 dags
+nơi bạn viết pipeline (Python DAG files)
+Airflow đọc từ đây
+
+👉 ví dụ:
+
+dag = DAG("etl_pipeline")
+📄 logs
+lưu log chạy task
+debug khi DAG fail
+🔌 plugins
+custom operators / hooks
+mở rộng Airflow
+🌐 8. ports
+ports:
+  - "8080:8080"
+
+👉 mở Airflow UI:
+
+http://localhost:8080
+🚀 9. command
+command: webserver
+
+👉 nghĩa là:
+
+chạy Airflow ở mode webserver
+mở Flask-based UI server
+🧠 LUỒNG HOẠT ĐỘNG
+
+Khi container chạy:
+
+webserver start
+connect PostgreSQL
+đọc DAGs từ /dags
+lấy trạng thái từ DB
+hiển thị UI tại port 8080
+🖥️ AIRFLOW WEB UI HIỂN THỊ GÌ?
+
+Trong browser bạn sẽ thấy:
+
+📊 DAGs
+danh sách pipeline
+▶️ Graph view
+flow task
+📅 Schedule
+lịch chạy
+📜 Logs
+lỗi từng task
+👥 Admin
+connections, variables
+🧩 VAI TRÒ TRONG HỆ THỐNG
+Airflow-init      → setup DB
+Airflow-scheduler → chạy DAG logic
+Airflow-webserver → UI để điều khiển
+PostgreSQL        → lưu metadata
+⚠️ LỖI THƯỜNG GẶP
+1. UI không mở được
+port 8080 bị chiếm
+2. DAG không hiện
+chưa mount ./dags
+sai đường dẫn /opt/airflow/dags
+3. Không thấy run logs
+thiếu volume logs
+4. webserver chạy nhưng không connect DB
+sai SQL_ALCHEMY_CONN
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 airflow-webserver = “mặt tiền của Airflow”
+
+Nó làm 3 việc chính:
+
+Hiển thị DAGs
+Hiển thị trạng thái chạy
+Cho phép điều khiển pipeline
+🔥 1 câu nhớ nhanh
+
+👉 scheduler = não (chạy job)
+👉 webserver = mắt (UI)
+👉 postgres = trí nhớ (lưu trạng thái)
+
+Nếu bạn muốn, mình có thể giải thích tiếp phần airflow-scheduler (cái quan trọng nhất) hoặc vẽ cho bạn luồng end-to-end: DAG chạy từ UI → scheduler → task → Kafka/MinIO/Postgres.

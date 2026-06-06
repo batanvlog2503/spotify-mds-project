@@ -1,0 +1,70 @@
+[2026-05-27T09:58:01.560+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-05-27T09:58:01.579+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.load_raw_to_snow_flake scheduled__2026-05-27T07:00:00+00:00 [queued]>
+[2026-05-27T09:58:01.584+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.load_raw_to_snow_flake scheduled__2026-05-27T07:00:00+00:00 [queued]>
+[2026-05-27T09:58:01.585+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 2
+[2026-05-27T09:58:01.596+0000] {taskinstance.py:2330} INFO - Executing <Task(PythonOperator): load_raw_to_snow_flake> on 2026-05-27 07:00:00+00:00
+[2026-05-27T09:58:01.603+0000] {standard_task_runner.py:90} INFO - Running: ['***', 'tasks', 'run', 'spotify_minio_to_snowflake_bronze', 'load_raw_to_snow_flake', 'scheduled__2026-05-27T07:00:00+00:00', '--job-id', '30', '--raw', '--subdir', 'DAGS_FOLDER/minio-to-snowflake.py', '--cfg-path', '/tmp/tmpic4dzwh2']
+[2026-05-27T09:58:01.605+0000] {logging_mixin.py:188} WARNING - /home/***/.local/lib/python3.12/site-packages/***/task/task_runner/standard_task_runner.py:62 DeprecationWarning: This process (pid=992) is multi-threaded, use of fork() may lead to deadlocks in the child.
+[2026-05-27T09:58:01.607+0000] {standard_task_runner.py:91} INFO - Job 30: Subtask load_raw_to_snow_flake
+[2026-05-27T09:58:01.608+0000] {standard_task_runner.py:64} INFO - Started process 1014 to run task
+[2026-05-27T09:58:01.667+0000] {task_command.py:426} INFO - Running <TaskInstance: spotify_minio_to_snowflake_bronze.load_raw_to_snow_flake scheduled__2026-05-27T07:00:00+00:00 [running]> on host 30613cef2245
+[2026-05-27T09:58:01.729+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='spotify_minio_to_snowflake_bronze' AIRFLOW_CTX_TASK_ID='load_raw_to_snow_flake' AIRFLOW_CTX_EXECUTION_DATE='2026-05-27T07:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-05-27T07:00:00+00:00'
+[2026-05-27T09:58:01.730+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-05-27T09:58:01.763+0000] {connection.py:408} INFO - Snowflake Connector for Python Version: 3.11.0, Python Version: 3.12.4, Platform: Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.36
+[2026-05-27T09:58:01.764+0000] {connection.py:1258} INFO - This connection is in OCSP Fail Open Mode. TLS Certificates would be checked for validity and revocation status. Any other Certificate Revocation related exceptions or OCSP Responder failures would be disregarded in favor of connectivity.
+[2026-05-27T09:58:02.557+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
+[2026-05-27T09:58:02.650+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
+[2026-05-27T09:58:02.754+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
+[2026-05-27T16:17:24.426+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-05-27T16:17:25.582+0000] {taskinstance.py:2905} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/network.py", line 755, in _post_request
+    ret = self._renew_session()
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/network.py", line 529, in _renew_session
+    return self._token_request(REQUEST_TYPE_RENEW)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/network.py", line 584, in _token_request
+    raise ReauthenticationRequest(
+snowflake.connector.network.ReauthenticationRequest: 390114 (08001): None: Authentication token has expired.  The user must authenticate again.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/taskinstance.py", line 465, in _execute_task
+    result = _execute_callable(context=context, **execute_callable_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/taskinstance.py", line 432, in _execute_callable
+    return execute_callable(context=context, **execute_callable_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/models/baseoperator.py", line 401, in wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/operators/python.py", line 235, in execute
+    return_value = self.execute_callable()
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/airflow/operators/python.py", line 252, in execute_callable
+    return self.python_callable(*self.op_args, **self.op_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/airflow/dags/minio-to-snowflake.py", line 209, in load_raw_to_snowflake
+    cur.execute(insert_sql, (
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/cursor.py", line 977, in execute
+    ret = self._execute_helper(query, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/cursor.py", line 694, in _execute_helper
+    ret = self._connection.cmd_query(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/connection.py", line 1328, in cmd_query
+    ret = self.rest.request(
+          ^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/network.py", line 493, in request
+    return self._post_request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.12/site-packages/snowflake/connector/network.py", line 758, in _post_request
+    raise ex.cause
+snowflake.connector.errors.ProgrammingError: 390114 (08001): None: Authentication token has expired.  The user must authenticate again.
+[2026-05-28T01:56:17.599+0000] {taskinstance.py:1206} INFO - Marking task as UP_FOR_RETRY. dag_id=spotify_minio_to_snowflake_bronze, task_id=load_raw_to_snow_flake, run_id=scheduled__2026-05-27T07:00:00+00:00, execution_date=20260527T070000, start_date=20260527T095801, end_date=20260527T161727
+[2026-05-28T01:56:18.644+0000] {standard_task_runner.py:110} ERROR - Failed to execute job 30 for task load_raw_to_snow_flake (390114 (08001): None: Authentication token has expired.  The user must authenticate again.; 1014)
+[2026-05-28T01:56:20.094+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 1
+[2026-05-28T01:56:21.724+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-05-28T01:56:22.124+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

@@ -1,0 +1,86 @@
+1. Service kafka
+kafka: → tên service trong Docker Compose (dùng để các container khác gọi nội bộ, ví dụ zookeeper:2181, kafka:9092)
+image: confluentinc/cp-kafka:7.4.1 → pull image Kafka bản 7.4.1 của Confluent
+container_name: kafka → đặt tên container khi chạy (chỉ để dễ nhìn, không bắt buộc)
+
+👉 Điểm quan trọng:
+service name (kafka) mới là thứ Docker DNS dùng nội bộ, không phải container_name.
+
+2. depends_on
+
+Bạn hiểu đúng:
+
+Kafka không tự chạy ngay
+Nó chờ Zookeeper container start trước
+
+⚠️ Nhưng cần lưu ý quan trọng hơn:
+
+depends_on chỉ đảm bảo “started”, không đảm bảo “ready”
+Zookeeper có thể đang chạy nhưng Kafka vẫn lỗi nếu connect quá sớm
+
+👉 Trong production thường cần thêm “healthcheck”, không chỉ depends_on.
+
+3. Ports (cái dễ nhầm nhất)
+"9092:9092"
+Port nội bộ Kafka trong Docker network
+Các service trong Docker dùng để nói chuyện với Kafka
+"29092:29092"
+Port “public/external”
+Dùng cho app chạy ngoài Docker (Python, Node, v.v.)
+
+👉 Ý tưởng chính:
+
+9092 = internal network
+29092 = external access
+4. Environment (bộ não Kafka)
+KAFKA_BROKER_ID=1
+ID của broker trong cluster
+Nếu có nhiều Kafka → mỗi cái phải khác ID
+KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+Kafka tìm Zookeeper qua:
+hostname: zookeeper
+port: 2181
+
+👉 Đây là lợi thế của Docker network: không cần IP
+
+KAFKA_LISTENERS vs KAFKA_ADVERTISED_LISTENERS
+
+Cái này bạn hiểu đúng hướng nhưng mình chuẩn hóa lại:
+
+LISTENERS = Kafka “nghe ở đâu”
+ADVERTISED_LISTENERS = Kafka “báo ra bên ngoài rằng tôi ở đây”
+
+👉 Ví dụ thực tế:
+
+Trong Docker: kafka:9092
+Bên ngoài máy bạn: localhost:29092 hoặc host.docker.internal:29092
+
+⚠️ Đây là lỗi phổ biến nhất khi connect Kafka:
+
+chạy được nhưng client không connect được vì advertised sai
+host.docker.internal
+Cầu nối để app ngoài Docker (Python local) truy cập container
+Replication / Transaction
+KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+
+👉 Ý nghĩa:
+
+chỉ 1 broker → không thể replicate
+phù hợp học tập/dev
+production thường là 3+
+5. Luồng hoạt động (bạn mô tả gần đúng, mình chỉnh lại cho “chuẩn Kafka” hơn)
+Docker Compose đọc file
+Khởi động Zookeeper
+Zookeeper mở cổng 2181
+Kafka container start
+Kafka connect Zookeeper để register broker
+Kafka mở:
+internal listener (9092)
+external listener (29092)
+Python app kết nối vào 29092 để produce/consume data
+Tóm tắt 1 câu dễ nhớ
+
+👉 Zookeeper = “quản lý metadata”
+👉 Kafka = “server xử lý message”
+👉 Docker ports = “cầu nối nội bộ + bên ngoài”

@@ -1,0 +1,141 @@
+🧠 1. “localhost” trong Docker nghĩa là gì?
+
+Khi bạn chạy docker compose up:
+
+Các service (Kafka, Airflow, Postgres…) chạy trong container
+Nhưng Docker sẽ map port từ container ra máy bạn
+
+👉 Vì vậy bạn truy cập bằng:
+
+http://localhost:<PORT_BÊN_HOST>
+
+KHÔNG phải port bên trong container.
+
+📌 2. Các localhost thường có trong stack của bạn
+
+Dựa vào stack bạn đang chạy (Airflow + Kafka + Postgres + MinIO…), thường sẽ có:
+
+🔹 Airflow Web UI
+http://localhost:8080
+
+👉 Bạn đang dùng cái này (đúng rồi)
+
+🔹 Kafka / Kafdrop (UI xem Kafka)
+
+Nếu compose có Kafdrop:
+
+http://localhost:9000
+
+(hoặc 9001 tuỳ config)
+
+🔹 Postgres (database)
+
+Không có UI web mặc định, nhưng port thường là:
+
+localhost:5432
+🔹 MinIO (object storage giống S3)
+
+Rất hay có trong stack:
+
+http://localhost:9000   (API)
+http://localhost:9001   (Web console)
+🔹 Kafka broker (không phải web)
+localhost:9092
+
+👉 cái này KHÔNG mở bằng browser
+
+⚠️ 3. “9090:9091” nghĩa là gì?
+
+Ví dụ trong docker-compose:
+
+ports:
+  - "9090:9091"
+
+👉 hiểu là:
+
+Bên ngoài (máy bạn)	Bên trong container
+localhost:9090	service chạy 9091
+
+✔️ Bạn truy cập:
+
+http://localhost:9090
+🧾 4. Trường hợp của bạn hiện tại
+
+Từ log bạn gửi:
+
+Airflow đã chạy OK ✔
+Postgres đang chạy ✔
+Scheduler chạy ✔
+Web login hoạt động ✔
+
+👉 tức là stack ĐÃ CHẠY ĐƯỢC
+
+🔑 5. Vì sao vào Airflow bị login?
+
+Bạn thấy:
+
+Login Failed for user: user
+
+👉 nghĩa là:
+
+Airflow đang bật authentication
+bạn nhập sai user/pass
+🧠 6. Tóm gọn trạng thái của bạn
+
+✔ Docker Compose đã chạy thành công
+✔ Image đã pull xong
+✔ Container đang chạy
+✔ Airflow webserver đã mở
+✔ Bạn đã truy cập được localhost:8080
+
+Hãy tưởng tượng Docker Desktop giống như một "Khu chung cư cao cấp", còn các chương trình của bạn là các căn hộ độc lập bên trong khu chung cư đó.
+
+Dưới đây là giải thích chi tiết, từng bước một:
+
+1. Bản chất của các chương trình trong Docker: "Container" là gì?
+Thông thường, khi bạn cài đặt một phần mềm (ví dụ: Postgres) trực tiếp lên Windows hoặc Mac, nó sẽ can thiệp vào hệ điều hành, tạo file trong ổ C, chiếm cổng mạng của máy.
+
+Nhưng trong Docker, các chương trình này không được cài trực tiếp như vậy. File docker-compose.yml của bạn đã ra lệnh cho Docker tạo ra các Container (Thùng chứa).
+
+Mỗi chương trình là một Container biệt lập: postgres là một container, kafka là một container, airflow-webserver là một container.
+
+Hệ điều hành mini riêng: Bên trong mỗi container thực chất là một hệ điều hành Linux thu nhỏ (thường là Alpine hoặc Ubuntu) đã được cài đặt sẵn chương trình đó và cấu hình tối ưu. Chúng hoàn toàn không biết đến sự tồn tại của hệ điều hành chính (Windows/Mac) bên ngoài.
+
+2. Tại sao Docker Desktop lại gom chúng lại và hiển thị lên?
+Khi bạn gõ lệnh docker compose up (hoặc nhấn nút chạy trên Docker Desktop), Docker Desktop sẽ làm các việc sau:
+
+Bước A: Đọc bản thiết kế (docker-compose.yml)
+Docker Desktop nhìn vào file của bạn và hiểu rằng: "À, người dùng này muốn xây một cụm gồm 8 dịch vụ (Zookeeper, Kafka, MinIO, Postgres, 3 dịch vụ Airflow, Kafdrop) và chúng có liên quan đến nhau."
+
+Bước B: Tạo một "Mạng nội bộ" (Virtual Network) cho chúng
+Docker Desktop tự động tạo ra một mạng ảo.
+
+Nhờ mạng này, các container có thể "nói chuyện" với nhau bằng tên dịch vụ. Ví dụ: Airflow chỉ cần gọi tên postgres:5432 là kết nối được, không cần biết IP thật của máy bạn là gì.
+
+Bước C: Đục lỗ thông ra máy thật (Port Mapping)
+Trong file của bạn có những đoạn như: ports: - "8080:8080".
+Docker Desktop sẽ đứng ra làm "người trung chuyển". Khi bạn gõ localhost:8080 trên trình duyệt máy thật, Docker Desktop sẽ đón lấy yêu cầu đó và đẩy thẳng vào bên trong container airflow-webserver.
+
+3. Bản đồ tư duy: Mối quan hệ từ File Code đến Docker Desktop
+Hãy nhìn vào luồng đi này để thấy tại sao chúng lại xuất hiện trên giao diện Docker Desktop của bạn:
+
+[ File docker-compose.yml ]
+         │
+         ▼ (Bạn ra lệnh Khởi chạy)
+[ Docker Desktop Engine ] ──(Tạo ra)──► [ Một Project / Stack ] (Thường đặt tên theo thư mục của bạn)
+                                                    │
+                                                    ├──► Container: zookeeper (Chạy ngầm)
+                                                    ├──► Container: kafka (Cổng 29092)
+                                                    ├──► Container: airflow-webserver (Cổng 8080)
+                                                    └──► Container: postgres (Cổng 5432)
+Khi bạn mở giao diện Docker Desktop, ở mục Containers, bạn sẽ thấy một cái tên chung (đó là tên thư mục chứa file code của bạn). Khi bấm mũi tên xổ xuống, bạn sẽ thấy danh sách 8 chương trình con đang chạy bên trong.
+
+Docker Desktop gom chúng lại như vậy để bạn:
+
+Dễ quản lý: Bật/Tắt cả hệ thống chỉ bằng 1 nút bấm thay vì phải bật từng cái.
+
+Theo dõi Log: Bấm vào từng chương trình để xem nó đang in ra chữ gì (dữ liệu đã chạy đến đâu, có lỗi gì không).
+
+Tránh xung đột: Nếu máy bạn đã cài sẵn một bản Postgres khác, bản Postgres trong Docker cũng không bị xung đột vì nó đã bị "nhốt" trong container và bạn có thể đổi cổng ra máy thật tùy ý.
+
+Nói tóm lại, các chương trình xuất hiện trong Docker Desktop vì Docker Desktop chính là "môi trường sống" ảo mà bạn tạo ra để nuôi các chương trình đó, giúp chúng hoạt động đồng bộ với nhau mà không làm rác máy tính thật của bạn.

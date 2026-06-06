@@ -1,0 +1,130 @@
+PostgreSQL trong Docker Compose của bạn là một database quan hệ (Relational Database) — dùng để lưu dữ liệu có cấu trúc kiểu bảng (rows/columns), giống Excel nhưng mạnh hơn rất nhiều.
+
+Trong hệ thống của bạn (Kafka + MinIO + Airflow), PostgreSQL thường đóng vai trò là database trung tâm để lưu metadata hoặc dữ liệu ứng dụng.
+
+🧱 1. Service postgres
+postgres:
+Tên service trong Docker Compose
+Các container khác có thể gọi bằng postgres
+📦 2. Image
+image: postgres:15
+Dùng PostgreSQL version 15
+Đây là bản stable, phổ biến trong production
+📛 3. container_name
+container_name: airflow-postgres
+Đặt tên container là airflow-postgres
+Thường dùng để Airflow connect vào DB này
+
+👉 Gợi ý: trong Airflow architecture, PostgreSQL thường là:
+
+metadata DB (lưu DAG runs, task status, logs)
+🔁 4. restart
+restart: always
+
+👉 Nghĩa là:
+
+container bị crash → tự động chạy lại
+máy restart → container cũng tự bật lại
+🔐 5. environment (cấu hình database)
+POSTGRES_USER: ${POSTGRES_USER}
+POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+POSTGRES_DB: ${POSTGRES_DB}
+Giải thích:
+👤 POSTGRES_USER
+user admin để login DB
+🔑 POSTGRES_PASSWORD
+mật khẩu user đó
+🗄️ POSTGRES_DB
+database được tạo sẵn khi container start
+
+👉 Ví dụ:
+
+POSTGRES_USER=airflow
+POSTGRES_PASSWORD=airflow123
+POSTGRES_DB=airflow
+💾 6. volumes
+volumes:
+  - postgres_data:/var/lib/postgresql/data
+
+👉 Đây là phần cực kỳ quan trọng:
+
+Ý nghĩa:
+/var/lib/postgresql/data = nơi PostgreSQL lưu dữ liệu thật
+postgres_data = volume của Docker
+
+👉 Nghĩa là:
+
+✔ dữ liệu KHÔNG mất khi container restart
+✔ giống “ổ cứng ảo” cho database
+
+🌐 7. ports
+ports:
+  - "5432:5432"
+
+👉 mở cổng PostgreSQL:
+
+5432 = default PostgreSQL port
+bạn có thể connect từ:
+Python (psycopg2, SQLAlchemy)
+Airflow
+DBeaver
+pgAdmin
+
+Ví dụ:
+
+host = "localhost"
+port = 5432
+🧠 LUỒNG HOẠT ĐỘNG
+Docker chạy PostgreSQL container
+Tạo database POSTGRES_DB
+Tạo user POSTGRES_USER
+Mount volume để lưu dữ liệu
+Mở port 5432
+Các app connect vào để:
+insert data
+query data
+lưu metadata (Airflow rất hay dùng)
+🧩 POSTGRES TRONG HỆ THỐNG CỦA BẠN
+
+Trong stack bạn đang học:
+
+Component	Vai trò
+Kafka	streaming data
+MinIO	lưu file (data lake)
+PostgreSQL	structured data + metadata
+Airflow	orchestration (điều phối pipeline)
+
+👉 PostgreSQL thường được Airflow dùng để:
+
+lưu DAG runs
+task status
+retry history
+scheduling info
+📊 VÍ DỤ THỰC TẾ
+Airflow table:
+dag_run:
+- dag_id
+- run_id
+- state
+- start_date
+Data app table:
+users:
+- id
+- name
+- email
+⚠️ LỖI THƯỜNG GẶP
+1. Không connect được DB
+sai user/password
+sai host (phải là postgres trong Docker network, không phải localhost)
+2. Mất data
+không mount volume
+3. Port conflict
+máy đã có PostgreSQL chạy sẵn ở 5432
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 PostgreSQL = database dạng bảng
+👉 5432 = cổng truy cập
+👉 volume = nơi lưu dữ liệu không bị mất
+👉 trong hệ thống bạn: thường dùng cho Airflow + metadata + structured data
+
+Nếu bạn muốn, mình có thể vẽ cho bạn toàn bộ hệ thống Kafka + Airflow + PostgreSQL + MinIO để bạn thấy rõ “data đi từ đâu → lưu ở đâu → xử lý thế nào” (cái này học là hiểu rất nhanh architecture luôn).

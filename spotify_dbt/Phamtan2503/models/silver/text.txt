@@ -1,0 +1,8 @@
+dbt run --select spotify_silver
+
+
+dbt debug
+
+docker compose -f docker-compose.yml up
+
+dbt run

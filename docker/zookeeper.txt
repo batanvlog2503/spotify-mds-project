@@ -1,0 +1,36 @@
+Như mình đã đề cập sơ qua, Zookeeper đóng vai trò là "người quản thư" hoặc "người điều phối" cho Kafka.
+
+Trong một hệ thống dữ liệu lớn, các thành phần không thể tự chạy riêng lẻ mà cần một nơi để lưu trữ thông tin chung và giữ liên lạc. Zookeeper sinh ra để làm việc đó.
+
+1. 4 Nhiệm vụ chính của Zookeeper trong dự án của bạn
+Dưới đây là lý do tại sao Kafka không thể sống thiếu Zookeeper (trong các phiên bản cũ và hiện tại bạn đang dùng):
+
+Quản lý Broker (Broker Metadata): Kafka có thể có nhiều máy chủ (Brokers). Zookeeper lưu trữ danh sách: Có bao nhiêu Broker đang chạy? Địa chỉ IP của chúng là gì? Nếu một Broker bị sập, Zookeeper sẽ ngay lập tức thông báo cho cả hệ thống biết.
+
+Quản lý Topic: Khi bạn tạo topic spotify-events, thông tin về cấu trúc của topic này (có bao nhiêu phần - partitions, lưu ở đâu) sẽ được cất giữ an toàn trong Zookeeper.
+
+Bầu chọn Leader (Controller Election): Đây là nhiệm vụ quan trọng nhất. Trong cụm Kafka, cần có một "ông chủ" (Controller) để ra lệnh cho các Broker khác. Nếu "ông chủ" này gặp sự cố, Zookeeper sẽ đứng ra tổ chức một cuộc "bầu cử" để chọn ra "ông chủ" mới ngay lập tức.
+
+Đồng bộ hóa dữ liệu: Zookeeper đảm bảo rằng tất cả các thành phần trong hệ thống đều nhìn thấy một dữ liệu giống nhau tại cùng một thời điểm.
+
+2. Giải thích "Bình dân học vụ" qua ví dụ thực tế
+Hãy tưởng tượng dự án Spotify của bạn là một nhà hàng lớn:
+
+Kafka là Nhà bếp: Nơi chế biến và chuyển thức ăn (dữ liệu) đi liên tục.
+
+Simulator là Khách hàng: Người gọi món liên tục.
+
+Zookeeper chính là Người quản lý nhà hàng:
+
+Ông ấy không nấu ăn (không xử lý dữ liệu).
+
+Nhưng ông ấy biết bàn nào đang trống, nhân viên nào đang nghỉ phép.
+
+Nếu bếp ga bị hỏng, ông ấy là người điều phối thợ đến sửa và bảo nhân viên chuyển sang dùng bếp dự phòng.
+
+3. Tại sao trong code của bạn lại có các thông số đó?
+Để Zookeeper làm tốt vai trò "quản lý", bạn cần cấu hình cho nó:
+
+ZOOKEEPER_CLIENT_PORT: 2181: Đây là cái cổng để Kafka "gọi điện" cho Zookeeper. Nếu bạn đổi số này, Kafka sẽ không tìm thấy quản lý của mình ở đâu cả.
+
+ZOOKEEPER_TICK_TIME: 2000: Đây là nhịp tim (Heartbeat). Cứ 2 giây, Zookeeper lại kiểm tra xem các thành phần khác có còn "sống" không. Nếu quá lâu không thấy phản hồi, nó coi như thành phần đó đã "chết" và thực hiện biện pháp thay thế.

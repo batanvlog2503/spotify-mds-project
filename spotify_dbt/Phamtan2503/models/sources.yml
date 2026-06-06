@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: SPOTIFY_DB
+    schema: BRONZE
+    tables:
+      - name: spotify_events_bronze
+
+    #. Nó giúp dbt hiểu chính xác nơi cần tìm dữ liệu thô trên Snowflake,
+    #đồng thời giữ cho code SQL ở các tầng sau luôn sạch sẽ,
+        #không bị bám cứng (hardcode) tên database hay schema.

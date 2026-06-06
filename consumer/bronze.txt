@@ -1,0 +1,40 @@
+Chính xác luôn bạn! Trong kiến trúc Hồ dữ liệu (Data Lake), thư mục bronze/ mà bạn định nghĩa trong code chính là tầng lưu trữ dữ liệu thô (Raw Data).
+
+Dữ liệu ở tầng này được giữ nguyên trạng, không cắt gọt, không chỉnh sửa so với lúc nó vừa rời khỏi nguồn phát (Kafka).
+
+🏗️ Vị trí của "Bronze" trong mô hình Data Lake (Medallion Architecture)
+Để dễ hình dung dòng chảy dữ liệu trong dự án Spotify này của bạn, hãy nhìn vào kiến trúc 3 tầng tiêu chuẩn dưới đây:
+
+[Kafka Topic (Nguồn)]
+       │
+       ▼ (Code Python của bạn đang làm nhiệm vụ này)
+ ┌───────────┐
+ │  BRONZE   │ ◄── ĐÂY LÀ CODE CỦA BẠN (Dữ liệu thô - Raw JSON Lines)
+ └─────┬─────┘
+       │
+       ▼ (Dùng Airflow/Spark để làm sạch, lọc bài trùng, ép kiểu dữ liệu)
+ ┌───────────┐
+ │  SILVER   │ (Dữ liệu đã làm sạch - Cleaned Tables)
+ └─────┬─────┘
+       │
+       ▼ (Gom nhóm, tính toán các chỉ số: ví dụ Top 10 bài hát nghe nhiều nhất)
+ ┌───────────┐
+ │   GOLD    │ (Dữ liệu sẵn sàng cho Báo cáo/BI - Analytics Ready)
+ └───────────┘
+💡 Tại sao trong Data Engineering người ta luôn phải giữ lại dữ liệu thô (Bronze)?
+Mới nhìn qua, nhiều người sẽ tự hỏi: "Tại sao không làm sạch dữ liệu ngay trong code Python rồi đẩy lên cho gọn, mắc công lưu dữ liệu thô làm gì cho tốn bộ nhớ?". Câu trả lời nằm ở 3 lý do "sống còn" sau:
+
+Có khả năng "quay ngược thời gian" (Replayability): Giả sử ngày mai sếp của bạn bảo: "Anh muốn phân tích thêm một trường thông tin cũ trong event Spotify mà tháng trước mình lỡ xóa bỏ lúc làm sạch". Nếu bạn lưu dữ liệu thô ở tầng Bronze, bạn chỉ cần chạy lại (re-run) pipeline từ tầng Bronze là xong. Nếu không lưu, dữ liệu đó coi như mất vĩnh viễn.
+
+Khôi phục khi có lỗi logic (Fault Tolerance): Nếu đoạn code làm sạch dữ liệu ở tầng Silver của bạn bị viết lỗi dẫn đến tính toán sai, bạn hoàn toàn có thể xóa tầng Silver đi, sửa lại code và đổ dữ liệu từ Bronze vào lại. Bronze giống như một chiếc "phao cứu sinh".
+
+Tách biệt trách nhiệm (Decoupling): Task hút dữ liệu từ Kafka chỉ làm đúng 1 nhiệm vụ duy nhất là: Hút thật nhanh và cất vào kho (MinIO). Nó không cần quan tâm dữ liệu đúng hay sai, giúp hệ thống chạy cực kỳ nhẹ và không bị nghẽn (Bottleneck).
+
+🔍 Phân tích định dạng dữ liệu thô trong code của bạn
+Nhìn vào cách bạn đóng gói dữ liệu thô:
+
+Python
+json_data = "\n".join([json.dumps(e) for e in batch])
+Đây gọi là định dạng JSON Lines (ndjson). Mỗi một dòng trong file là một sự kiện (event) độc lập của Spotify. Đây là định dạng lưu trữ dữ liệu thô tối ưu nhất cho Data Lake vì:
+
+Các công cụ xử lý dữ liệu lớn (như Apache Spark, Snowflake, AWS Athena) cực kỳ thích định dạng này. Chúng có thể đọc file theo từng dòng một cách song song mà không cần phải load toàn bộ file lớn vào RAM như file JSON dạng mảng thông thường ([...]).

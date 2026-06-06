@@ -1,0 +1,49 @@
+1. Giai đoạn Khởi tạo (The Setup)
+Khi bạn chạy docker-compose up, các dịch vụ sẽ thức dậy theo thứ tự ưu tiên:
+
+Zookeeper & Postgres: Hai ông "thư ký" này dậy trước để giữ danh bạ cho Kafka và lưu trữ dữ liệu vận hành cho Airflow.
+
+Kafka: Sau khi thấy Zookeeper đã sẵn sàng, Kafka sẽ khởi động để mở "băng chuyền" dữ liệu.
+
+Airflow-init: Đây là một container chạy một lần duy nhất. Nó sẽ vào Postgres để tạo các bảng cần thiết, tạo tài khoản Admin cho bạn, rồi tự tắt đi sau khi xong việc.
+
+2. Luồng Dữ liệu (The Data Flow)
+Đây là cách dữ liệu Spotify của bạn "chạy" qua các container:
+
+Ingestion (Nạp vào): Script Python (Simulator) từ ngoài máy của Tân bắn dữ liệu vào Kafka qua cổng 29092.
+
+Monitoring (Giám sát): Bạn mở trình duyệt vào cổng 9000 của Kafdrop. Tại đây, bạn sẽ thấy giao diện web cực đẹp để soi xem dữ liệu JSON đang nằm trong Kafka trông như thế nào mà không cần gõ lệnh.
+
+Raw Storage (Lưu trữ thô): Một Consumer (có thể là script Python khác hoặc Airflow) sẽ lấy dữ liệu từ Kafka và ném vào MinIO (Cổng 9001/9002). MinIO đóng vai trò như một cái kho chứa "vàng thô" (Data Lake).
+
+
+3. Điều phối & Xử lý (The Orchestration)
+Đây là nơi Airflow thể hiện vai trò "nhạc trưởng":
+
+Airflow Scheduler: Giống như một cái đồng hồ báo thức. Nó liên tục kiểm tra các file trong thư mục ./dags.
+
+Airflow Webserver (Cổng 8080): Là bảng điều khiển của bạn. Bạn vào đây để nhấn nút "Start" cho các quy trình:
+
+Task 1: Quét dữ liệu mới trong MinIO.
+
+Task 2: Đẩy dữ liệu từ MinIO lên Snowflake.
+
+Task 3: Kích hoạt dbt để làm sạch dữ liệu trong Snowflak
+
+
+4. Tổng kết các "Cửa" (Ports) bạn cần nhớ:
+Dịch vụ                     Cổng (URL)                   Công dụng
+Kafdrop                   localhost:9000                Soi dữ liệu trong Kafka (Rất nên xem!).
+Airflow                   localhost:8080                 Quản lý và chạy các Task tự động.
+MinIO                     localhost:9001                 Xem các file dữ liệu thô đã được lưu.
+Postgres                  localhost:5432                Nơi Airflow lưu lịch sử chạy (bạn ít khi phải vào đây).
+
+Kafka → nhận data Spotify
+↓
+Airflow → xử lý pipeline
+↓
+Postgres → lưu metadata
+↓
+MinIO → lưu file
+↓
+Kafdrop → xem message

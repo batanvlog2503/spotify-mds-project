@@ -1,0 +1,205 @@
+airflow-scheduler là bộ não thật sự của Airflow.
+Nếu airflow-webserver là giao diện, thì scheduler mới là thứ:
+
+👉 đọc DAG
+👉 quyết định khi nào chạy task
+👉 orchestration pipeline
+
+Nó là thành phần quan trọng nhất trong Airflow.
+
+🧱 1. Service airflow-scheduler
+airflow-scheduler:
+
+👉 Đây là container chạy “scheduler engine”.
+
+📦 2. Image
+image: apache/airflow:2.9.3
+dùng Airflow version 2.9.3
+cùng version với webserver/init để tránh lỗi schema
+📛 3. container_name
+container_name: airflow-scheduler
+tên container để dễ debug/log
+🔁 4. restart
+restart: always
+
+👉 scheduler crash → tự bật lại
+
+Quan trọng vì:
+
+scheduler chết = toàn bộ DAG ngừng chạy
+🔗 5. depends_on
+depends_on:
+  - airflow-init
+  - postgres
+Nghĩa là:
+airflow-init
+phải setup DB trước
+postgres
+scheduler cần metadata DB để hoạt động
+⚙️ 6. environment
+🔹 tắt DAG mẫu
+AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+🔹 kết nối PostgreSQL
+AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+👉 Scheduler dùng DB để lưu:
+
+DAG state
+task state
+retry
+execution history
+queue
+📂 7. volumes (rất quan trọng)
+volumes:
+  - ./dags:/opt/airflow/dags
+  - ./logs:/opt/airflow/logs
+  - ./plugins:/opt/airflow/plugins
+📁 dags
+
+👉 nơi scheduler đọc DAG Python files
+
+Ví dụ:
+
+with DAG("spotify_pipeline"):
+
+Scheduler sẽ scan folder này liên tục.
+
+📄 logs
+
+👉 lưu log task execution
+
+Ví dụ:
+
+task fail
+retry
+traceback
+🔌 plugins
+
+👉 custom operator/hooks
+
+🚀 8. command
+command: scheduler
+
+👉 container chạy ở chế độ scheduler
+
+🧠 AIRFLOW SCHEDULER LÀM GÌ?
+
+Đây là phần quan trọng nhất.
+
+Scheduler liên tục:
+
+1. Scan DAG files
+
+Đọc:
+
+./dags/*.py
+2. Parse DAG
+
+Hiểu:
+
+task nào
+dependency nào
+cron schedule nào
+
+Ví dụ:
+
+schedule="@daily"
+3. Kiểm tra thời gian
+
+Ví dụ:
+
+đã tới 8h sáng chưa?
+tới lịch daily chưa?
+4. Tạo DAG run
+
+Khi tới lịch:
+
+spotify_pipeline_run_2026_05_18
+5. Dispatch task
+
+Ví dụ:
+
+extract → transform → load
+
+Scheduler quyết định:
+
+task nào chạy trước
+task nào chờ
+🧩 LUỒNG THỰC TẾ
+Scheduler đọc DAG
+        ↓
+Tới giờ schedule
+        ↓
+Tạo DAG Run
+        ↓
+Tạo Task Instance
+        ↓
+Task được execute
+        ↓
+Lưu trạng thái vào PostgreSQL
+🔥 VÍ DỤ HỆ CỦA BẠN
+
+Ví dụ DAG:
+
+Spotify API → Kafka → MinIO
+
+Scheduler sẽ:
+
+đúng giờ
+trigger task
+task gửi data Kafka
+task lưu MinIO
+update status vào PostgreSQL
+🖥️ KHÁC WEBSERVER NHƯ THẾ NÀO?
+Component	Vai trò
+webserver	UI
+scheduler	chạy orchestration thật
+postgres	lưu metadata
+⚠️ LỖI THƯỜNG GẶP
+1. DAG không chạy
+scheduler chết
+2. DAG không xuất hiện
+mount dags sai
+3. Task stuck queued
+scheduler lỗi
+4. Scheduler chạy nhưng task fail
+xem logs volume
+🧾 9. volumes: cuối file
+volumes:
+  postgres_data:
+
+👉 đây là Docker named volume.
+
+Nó tạo:
+
+/var/lib/docker/volumes/postgres_data
+
+để lưu database PostgreSQL thật.
+
+🧠 Vì sao cần volume?
+
+Nếu không có:
+
+❌ restart container = mất toàn bộ DB
+
+Có volume:
+
+✔ dữ liệu giữ nguyên
+✔ Airflow metadata không mất
+
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 airflow-scheduler = “CPU điều phối pipeline”
+
+Nó:
+
+đọc DAG
+canh lịch
+trigger task
+quản lý workflow
+🔥 1 câu nhớ nhanh
+
+👉 Webserver = màn hình
+👉 Scheduler = bộ não
+👉 PostgreSQL = trí nhớ
+👉 DAG = kế hoạch công việc

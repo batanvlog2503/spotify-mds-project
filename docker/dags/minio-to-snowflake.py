@@ -1,0 +1,294 @@
+import json
+import os
+from datetime import datetime, timedelta
+from airflow import DAG
+# dùng đêr khai báo 1 pipeline tự động
+# quy định khi nào pipeline này chạy
+from airflow.operators.python import PythonOperator
+import boto3
+# để đọc được cái dữ liệu từ MINIO
+import snowflake.connector
+
+#trình kết nối chính thức của python tới snowflake
+# khi đọc dữ liệu thô từ minio và clean
+# thư viện này sẽ mở ra một đường ống kết nối snowflake
+# dế bắn các lệnh sql
+from dotenv import load_dotenv
+
+
+#--------------------------------
+#--------------LOAD ENVIRONMENT VARIABLES
+#--------------------------------
+
+load_dotenv(dotenv_path="/opt/airflow/dags/.env")
+# các file code DAG của bạn sẽ được ném vào trong một môi trường container biệt lập
+# ---------------------------------------
+# ---------------CONFIGURATION VARIABLES----
+# ---------------------------------------------
+
+
+# -----------MINIO Configuration
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+# địa chỉ của minio
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
+# thùng chứa S3 bucket
+MINIO_PREFIX = os.getenv("MINIO_PREFIX")
+# thư mục con bên trong cái giỏ. Dùng để định tuyến
+# xem dữ liệu nào sẽ được cất vào đâu để tránh lẫn lộn
+
+
+#--------------SNOWFLAKE CONFIGURATION---------
+SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
+# tên đặng nhập
+SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
+# password
+SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
+#mã định danh định tuyến của cụm Snowflake( thường có dạng xy12345.ap-southeast-1)
+# kiểu địa chỉ của tòa nhà giúp python biết cụm server snowflake của bạn đang nằm ở vùng nào
+# trên thế giới AWS, Azure hau GCP
+SNOWFLAKE_WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
+# cụm máy tính ảo tính toán
+# cung cấp CPU /  Ram dể chạy các câu lệnh SQL
+SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE")
+#tên của CSDL databse lớn nhất
+SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA")
+# lớp trung gian Schema dùng để gom nhóm các bảng có cùng chủ đề lại với nhau
+SNOWFLAKE_TABLE = os.getenv("SNOWFLAKE_TABLE")
+#Tên của cái Bảng (Table) cụ thể chứa dữ liệu – nơi có các hàng và các cột.
+
+# ---------------LOCAL FILE PATH ------------------
+
+LOCAL_TEMP_PATH = os.getenv("LOCAL_TEMP_PATH", "/tmp/spotify_raw.json")
+# đóng vai trò như 1 trạm trung chuyển trong quá trình
+# chuyển dữ liệu từ Minio sng Snowflake
+# LOCAL_TEMP_PATH: Code sẽ ngó vào file .env xem bạn cấu hình đường dẫn cụ thể nà không
+# Step 1: Tải file thô từ MinIO về ổ cứng máy Airflow
+# [MinIO Bucket] ──────► Tải xuống (Download) ──────► [Ổ cứng máy Airflow: LOCAL_TEMP_PATH]
+#
+# Step 2: Code Python mở file tạm này ra để đọc, xử lý hoặc kiểm tra dữ liệu
+# [Ổ cứng máy Airflow: LOCAL_TEMP_PATH] ──► Mở file (Read & Process) ──► [Bộ nhớ RAM]
+#
+# Step 3: Đẩy dữ liệu đã xử lý từ file tạm sang Snowflake
+# [Ổ cứng máy Airflow: LOCAL_TEMP_PATH] ──────► Đẩy lên (Load/Stage) ──────► [Snowflake Table]
+
+
+#-------------------------------------------------
+#--------------PYTHON TASKS FUNCTIONS-------------
+#------------------------------------------------
+
+# vào mino quét sacjk các file dữ liệu thô .json
+# mà kafka ném vào đó, gộp chúng lại thaanfh một file duy nhất roiof tai ve airflow
+def extract_from_minio(): #khai thác truy xuất
+    """
+
+    Extract all .json event files from MINIO -> combine -> save locallu
+    :return:
+    """
+    s3 = boto3.client(
+        "s3", # tạo 1 thực thể client sử dụng giao thức S3
+        endpoint_url=MINIO_ENDPOINT, # địa chỉ IP
+        aws_access_key_id=MINIO_ACCESS_KEY,
+        aws_secret_access_key=MINIO_SECRET_KEY
+    )
+    response = s3.list_objects_v2(Bucket = MINIO_BUCKET, Prefix = MINIO_PREFIX
+                                 )
+    # đơn giản cái response là list các file .json đã tổng hợp
+    # lấy từ trong MINI_BUCKET , tại thư mục MINIO_PREFIX
+    #
+    # ví dụ trong bucket spotify có rất nhiều file json tổng hợp
+    contents = response.get("Contents", [])
+
+    #MINIO trả về danh sách chứa thông tin các file dã tìm thấy, nếu thư mục
+    # rỗng thì hàm ,get() trả về mảng rỗng [] để code phía dưới không bị crash
+    all_events = []
+    # tạo một mảng trống python để chuẩn bị hứng dữ liệu gom được
+
+    for obj in contents: # trong mỗi object in list contents
+        key = obj["Key"] # Key:bronze/date=2026-05-21/hour=13/spotify_events_123.json
+        # đường dẫn tuyệt đối
+        if not key.endswith(".json"): # chỉ làm việc với json
+            continue
+
+        # -> tải về ram và bóc tách dữ liệu
+        data = s3.get_object(Bucket=MINIO_BUCKET, Key = key) # return binary
+        # thực hiện tải download nội dung  của file cụ thể đó từ MINIO vào bộ
+        # nhớ cuẩ code dưới dạng dữ liệu nhị phân
+        lines = data["Body"].read().decode("utf-8").splitlines()
+        # biến mớ nhị phân thành utf-8
+        # lines = [
+        #     '{"event_id": "d676d0cf...", "artist_name": "Kanye West", ...}',  # Phần tử 1
+        #     '{"event_id": "46a3555d...", "artist_name": "Dua Lipa", ...}',  # Phần tử 2
+        #     ...
+        #     '{"event_id": "f4f8653b...", "artist_name": "The Weekend", ...}'  # Phần tử 10
+        # ]
+        for line in lines:
+
+            try:
+                all_events.append(json.loads(line))
+                # biến dòng chữ thô thành 1 object JSON Dic trong python
+                # sau ó ném cái object vào 1 cái rổ chung
+            except json.JSONDecodeError: # lỗi Format JSON thì next
+                continue
+    with open(LOCAL_TEMP_PATH, "w") as f:
+        json.dump(all_events, f)
+        # ghi hết tất cả sự kiện all_event
+    print(f"✅ Extracted {len(all_events)} events from MinIO and saved to {LOCAL_TEMP_PATH}")
+    return LOCAL_TEMP_PATH
+# [Kafka] ──► [MinIO (Bronze)] ──► [Hàm extract_from_minio()] ──► [LOCAL_TEMP_PATH] ◄── Bạn đang ở ĐÂY!
+#                                                                       │
+#                                                                       ▼ (Cần viết thêm hàm Load)
+#                                                                  [Snowflake]
+
+# nhiệm vụ
+# đọc file tạm chứa mở dữ liệu thu gom từ mINIo lên
+# sau đó kết nối snowflake
+# tự độn tạo bảng nếu chưa có và chèn dữ liệu thô
+# Snowflake là một kho dữ liệu (Data Warehouse) tối ưu cho việc tính toán,
+# phân tích báo cáo lớn,
+# chứ nó không được thiết kế để hứng 1 triệu lệnh chèn dữ liệu nhỏ lẻ mỗi giây.
+def load_raw_to_snowflake(**context):
+    """
+    load raw data directly into Snowflake Bronze table
+    No transformation or clleaning
+    :param context:
+    :return:
+    """
+
+    file_path = context["ti"].xcom_pull(task_ids = "extract_data")
+    # lấy vị trí file tmp
+    # /tmp/spotify_raw.json
+    with open(file_path, "r") as f:
+        events = json.load(f)
+    # : Đọc file tạm dạng mảng JSON (10 bài hát lúc nãy) và biến nó thành một
+    # Danh sách các Object nằm trong bộ nhớ RAM (biến events).
+    if not events:
+        print("No Events found to load.")
+        return
+    conn = snowflake.connector.connect(
+        user=SNOWFLAKE_USER,
+        password=SNOWFLAKE_PASSWORD,
+        account=SNOWFLAKE_ACCOUNT,
+        warehouse=SNOWFLAKE_WAREHOUSE,
+        database=SNOWFLAKE_DATABASE,
+        schema=SNOWFLAKE_SCHEMA
+    )
+
+    cur = conn.cursor()
+    # tạo con troeor để khi nào thực hiện query SQL bạn
+    # phải dùng contror này thực thi
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {SNOWFLAKE_TABLE}(
+        event_id STRING, 
+        user_id STRING, 
+        song_id STRING, 
+        artist_name STRING, 
+        song_name STRING, 
+        event_type STRING,
+        device_type STRING, 
+        country STRING, 
+        timestamp STRING
+        
+    );
+    """
+
+    cur.execute(f"USE DATABASE {SNOWFLAKE_DATABASE}")
+    cur.execute(f"USE SCHEMA {SNOWFLAKE_SCHEMA}")
+    cur.execute(create_table_sql)
+
+    insert_sql = f"""
+        INSERT INTO {SNOWFLAKE_TABLE}(
+            event_id, user_id, song_id, artist_name, song_name,
+            event_type, device_type, country, timestamp
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+
+    for event in events:
+        cur.execute(insert_sql, (
+            event.get("event_id"),
+            event.get("user_id"),
+            event.get("song_id"),
+            event.get("artist_name"),
+            event.get("song_name"),
+            event.get("event_type"),
+            event.get("device_type"),
+            event.get("country"),
+            event.get("timestamp")
+        ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print(f"✅ Loaded {len(events)} raw records into Snowflake table: {SNOWFLAKE_TABLE}")
+# tác dụng của hàm
+# 1. Biến dữ liệu từ "Tạm thời" thành "Vĩnh viễn"
+#2. Biến dữ liệu từ dạng "Văn bản" (JSON) thành dạng "Bảng phân tích" (Structured SQL)
+#3. Đóng vai trò là Tầng "Bronze" (Dữ liệu thô - Raw Layer) trong kiến trúc Medallion
+
+#------------------------------------------------------------
+#-----------------AIRFLOW DAG DEFINITION----------------------
+#-------------------------------------------------------------
+
+#Nó quy định: Khi nào hệ thống bắt đầu chạy, nếu lỗi thì xử lý ra sao, và các bước phải chạy theo thứ tự nào.
+# kiểu đây là một bản thiết kễ và đợi khi nào hệt thống hoạt động
+
+# cấu hình quản trị và chính sách bảo hiểm (Retry)
+default_args = {
+    "owner":"airflow",
+    # khai báo người quản lý DAG này là ai: airflow
+    "start_date":datetime(2025, 10, 21),
+    # ngày bắt đầu có hiệu lực với DAG
+    # airflow dựa vào mốc này để tính toán ls chạy
+    "retries":1,
+    # hiểu đơn giản nếu gặp lỗi chập chờn khi chạy Minio và Snowflake
+    # airflow k báo thất bại ngay mà  refresh lại 1 lần nữa
+    "retry_delay":timedelta(minutes=5)
+    # khi lỗi thì đợi 5 phút để đứng lại
+    # sau đó mới chạy lại
+}
+
+# khung DAG
+with DAG(
+    "spotify_minio_to_snowflake_bronze",
+    # id định danh duy nhất của DAG,
+    # hienj trên giao diện UI Airflow
+    # nhinf vào tên là biết nhiệm vụ của DAG
+    default_args=default_args,
+    #
+    description="load raw spotify events from MINIO to Snowflake Bronze table",
+    schedule_interval="@hourly",
+    catchup=False
+) as dag:
+    # bên trong DAG dùng PythonOperator - một công cụ
+    # airflow chuyên dùng để bọc hàm python thuần túy
+
+    # gom dữ liệu vào một file từ MINIO
+    extract_task = PythonOperator(
+        task_id="extract_data",
+        # tên của task1 trên giao diện đồ họa
+        # phài trùng với xcom_pull(task_ids="extract_data")
+        python_callable=extract_from_minio
+        # chỉ định cho airflow biết khi bấm chạy Task này
+        # hãy thực thi extract_from_minio
+
+    )
+    # gửi dữ liệu lên Snowflake
+    load_task = PythonOperator(
+        task_id = "load_raw_to_snow_flake",
+        # tên của task2
+        python_callable=load_raw_to_snowflake,
+        # chạy hàm nạp dữ liệu lên Snowflake
+        # provide_context=True
+        #important!
+        # Nó bật tính năng mở kho dữ liệu hệ thống của Airflow,
+        #cho phép hàm load_raw_to_snowflake nhận được biến context
+        # để từ đó xài được lệnh gọi XCom lấy đường dẫn file tạm.
+    )
+
+    extract_task >> load_task
+    # [extract_task] ───(Chạy thành công)───► [load_task]
+
+    #extract thành công thì mới có load

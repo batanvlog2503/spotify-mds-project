@@ -1,0 +1,16 @@
+🔍 Giải thích ý nghĩa từng thông số cấu hìnhBiến cấu hìnhÝ nghĩa thực tếVí dụ cụ thểMINIO_ENDPOINTĐịa chỉ nhà của MinIO. Là đường dẫn URL để code biết phải tìm đến cụm MinIO nào để kết nối.http://localhost:9000 hoặc http://minio:9000 (nếu chạy Docker)MINIO_ACCESS_KEYTên đăng nhập (Username) tài khoản MinIO của bạn.admin, minioadminMINIO_SECRET_KEYMật khẩu (Password) tương ứng với Access Key để xác thực quyền truy cập.super_secret_passwordMINIO_BUCKETCái giỏ / Thùng chứa lớn nhất. Trong MinIO/S3, dữ liệu bắt buộc phải nằm trong một cái Bucket cụ thể nào đó.spotify-data-lake, bronzeMINIO_PREFIXThư mục con bên trong cái giỏ. Dùng để định tuyến xem dữ liệu sẽ được cất vào đâu để tránh bị lẫn lộn.raw/, events/🛠️ Code thực tế sẽ dùng các biến này để kết nối như thế nào?Sau khi lấy được 5 thông số trên thông qua hàm os.getenv(), code của bạn (thường sử dụng thư viện boto3) sẽ thực hiện "bấm nút đăng nhập" và kết nối thực sự bằng đoạn code tương tự như sau:Pythonimport boto3
+
+# 1. Điền thông số vào để TẠO KẾT NỐI (Đăng nhập)
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=MINIO_ENDPOINT,        # Gọi địa chỉ nhà
+    aws_access_key_id=MINIO_ACCESS_KEY,  # Điền username
+    aws_secret_access_key=MINIO_SECRET_KEY # Điền password
+)
+
+# 2. Sử dụng BUCKET và PREFIX để tải file lên đúng vị trí
+s3_client.upload_file(
+    Filename="local_file.json",
+    Bucket=MINIO_BUCKET,                            # Ném vào giỏ nào?
+    Key=f"{MINIO_PREFIX}/spotify_events_2026.json"   # Ném vào thư mục con nào với tên gì?
+)

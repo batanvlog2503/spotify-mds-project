@@ -1,0 +1,100 @@
+kafdrop là một web UI để xem và quản lý Kafka — kiểu như “trình duyệt cho Kafka” giúp bạn không phải dùng command line.
+
+Mình giải thích từng phần của đoạn config bạn gửi:
+
+🧩 1. Service kafdrop
+kafdrop:
+Đây là tên service trong Docker Compose
+Các container khác có thể gọi nó bằng tên kafdrop
+
+👉 Hiểu đơn giản: đây là “dashboard web” cho Kafka
+
+🖼️ 2. Image
+image: obsidiandynamics/kafdrop:latest
+Pull image Kafdrop từ Docker Hub
+latest = bản mới nhất
+
+👉 Kafdrop là tool mã nguồn mở dùng để:
+
+xem topic
+xem message
+xem consumer group
+debug Kafka dễ hơn nhiều
+📦 3. Container name
+container_name: kafdrop
+Đặt tên container là kafdrop
+Chỉ để dễ quản lý, không ảnh hưởng logic chạy
+🔗 4. depends_on
+depends_on:
+  - kafka
+
+👉 Nghĩa là:
+
+Kafdrop chỉ chạy sau khi Kafka container đã start
+
+⚠️ Nhưng giống Kafka-Zookeeper:
+
+chỉ đảm bảo “start”, không đảm bảo Kafka đã sẵn sàng
+nếu Kafka chưa ready → Kafdrop có thể lỗi tạm thời
+🌐 5. ports
+ports:
+  - "9000:9000"
+Mở Kafdrop UI ra ngoài máy bạn
+Truy cập bằng:
+
+👉 http://localhost:9000
+
+⚙️ 6. environment
+KAFKA_BROKERCONNECT: kafka:9092
+Ý nghĩa:
+Kafdrop cần biết Kafka đang ở đâu để kết nối
+kafka:9092 nghĩa là:
+
+👉 "Kafka service trong Docker network, port 9092"
+
+🧠 LUỒNG HOẠT ĐỘNG
+
+Khi chạy hệ thống:
+
+Kafka chạy trước
+Kafdrop chạy sau
+Kafdrop connect vào Kafka qua kafka:9092
+Bạn mở browser:
+
+👉 http://localhost:9000
+
+Bạn thấy:
+danh sách topics
+messages
+consumer groups
+🧾 TÓM TẮT DỄ HIỂU
+
+👉 Kafka = backend message system
+👉 Kafdrop = “admin dashboard + UI viewer” cho Kafka
+
+🔥 Ví dụ thực tế
+
+Bạn gửi message vào topic:
+
+topic: spotify-data
+
+Trong Kafdrop bạn sẽ thấy:
+
+topic spotify-data
+message chạy real-time
+partition info
+offset
+⚠️ LỖI THƯỜNG GẶP
+
+Nếu Kafdrop không connect được Kafka:
+
+Sai KAFKA_BROKERCONNECT
+phải là kafka:9092 (không phải localhost)
+Kafka chưa ready khi Kafdrop start
+restart container là xong
+Kafka advertised listener sai
+đây là lỗi phổ biến nhất
+
+Nếu bạn muốn, mình có thể:
+
+giải thích toàn bộ kiến trúc Kafka + Zookeeper + Kafdrop trong 1 sơ đồ
