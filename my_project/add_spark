@@ -1,0 +1,14 @@
+🤔 Nhưng thật ra không nên thay
+Dùng Spark để sinh dữ liệu giả là hơi "overkill" và không đúng vai trò của Spark. Spark sinh ra để xử lý dữ liệu lớn, không phải tạo dữ liệu giả — giáo viên có thể hỏi và đây là điểm trừ về thiết kế.
+
+✅ Vị trí đúng của Spark trong pipeline
+Spark nên đứng sau Kafka, làm tầng xử lý streaming:
+Faker Producer (Python) → Kafka → Spark Structured Streaming → MinIO
+                                        ↑
+                                   Đây mới là chỗ Spark tỏa sáng
+Spark ở đây làm được:
+
+Đọc stream từ Kafka real-time
+Validate + clean schema
+Enrich data (thêm cột, tính toán)
+Ghi xuống MinIO theo partition

@@ -1,0 +1,17 @@
+
+MLflow & MLOps
+MLflow không phải là model dự báo — nó là công cụ quản lý quá trình train model. Hiểu đơn giản:
+
+Train model → MLflow ghi lại:
+  ├── Tham số (learning rate, epochs...)
+  ├── Kết quả (MAE, RMSE, accuracy)
+  ├── Biểu đồ (loss curve)
+  └── File model đã train
+Còn SARIMA mới là model dự báo thật sự — nhóm kia dùng nó để dự báo doanh thu theo chuỗi thời gian. MLflow chỉ là "nhật ký" theo dõi quá trình train đó.
+
+Với Spotify của bạn có thể dự báo:
+
+Lượt nghe tuần tới của từng bài hát
+Giờ cao điểm ngày mai
+User nào có nguy cơ churn
+

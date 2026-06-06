@@ -1,0 +1,45 @@
+Hoàn toàn được! Hiện tại Gold layer của bạn chỉ có 2 bảng (user_behavior và song_popularity). Có thể mở rộng thêm nhiều bảng Gold khác rất tự nhiên từ dữ liệu Spotify này:
+
+📦 Các bảng Gold có thể thêm
+Phân tích user
+
+gold_user_loyalty — phân loại user thành Casual / Regular / Power listener dựa trên số ngày active trong tháng
+gold_user_churn_risk — flag user có dấu hiệu rời bỏ (tỷ lệ skip cao, số ngày không active tăng dần)
+gold_user_device_preference — mỗi user thường nghe trên thiết bị nào nhất
+
+Phân tích bài hát / nghệ sĩ
+
+gold_song_trend_weekly — top bài hát theo từng tuần, so sánh tuần này vs tuần trước
+gold_artist_performance — tổng hợp theo nghệ sĩ: tổng plays, skip rate, số user unique
+gold_skip_rate_by_song — bài hát nào có tỷ lệ skip cao nhất (chỉ số chất lượng)
+
+Phân tích địa lý & thiết bị
+
+gold_country_stats — quốc gia nào nghe nhiều nhất, thiết bị phổ biến theo vùng
+gold_peak_hours — giờ nào trong ngày traffic cao nhất theo từng quốc gia
+
+Phân tích playlist
+
+gold_playlist_conversion — bài nào được add vào playlist nhiều sau khi nghe (chỉ số "hit tiềm năng")
+
+
+
+Gold table de xuat 8 bang
+
+gold_song_popularity
+gold_artist_performance
+gold_user_behavior_daily
+gold_user_loyalty
+gold_churn_risk
+gold_peak_hours
+gold_country_stats
+gold_playlist_conversion
+
+Lich chạy airflow DAG
+
+[Every hour]
+    1. Spark Streaming đang chạy liên tục (always-on)
+    2. Airflow trigger: Hive process Bronze → Silver
+    3. Airflow trigger: dbt run Silver → Gold (8 tables)
+    4. Airflow trigger: dbt test (data quality check)
+    5. Superset tự refresh dashboard

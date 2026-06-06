@@ -1,0 +1,11 @@
+🗓 Kế hoạch 5 ngày
+Ngày 1 — Spark Streaming (thay Consumer Python)
+Đây là thay đổi có impact lớn nhất, giáo viên nhìn vào pipeline thấy ngay sự khác biệt. Chỉ cần viết 1 file spark_streaming_job.py thay thế consumer.py hiện tại.
+Ngày 2 — Mở rộng dbt (thêm Quarantine + 6 Gold tables còn lại)
+Mỗi Gold table chỉ là 1 file SQL ~20 dòng. 6 bảng làm trong 1 ngày hoàn toàn được. Quarantine thêm vào Silver model luôn, không tốn nhiều thời gian.
+Ngày 3 — Dim tables + Star Schema
+Tạo dim_users, dim_songs, dim_date trong dbt. Cập nhật Faker Producer thêm các field mới như genre, subscription_type, age, duration_seconds.
+Ngày 4 — MLflow + model đơn giản
+Thêm container MLflow vào docker-compose. Viết script Python train Prophet dự báo lượt nghe theo ngày. Thêm task vào Airflow DAG. Không cần model phức tạp — chỉ cần chạy được và log metrics.
+Ngày 5 — Dashboard + hoàn thiện
+Thêm Metabase hoặc Superset vào docker-compose. Kết nối Snowflake, tạo 3-4 chart cơ bản. Dành 2-3 tiếng cuối để test toàn bộ pipeline chạy end-to-end.

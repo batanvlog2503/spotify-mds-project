@@ -1,0 +1,26 @@
+Show more
+16:31
+Tóm tắt hệ thống Data Pipeline Spotify
+Đây là một data pipeline hoàn chỉnh mô phỏng hệ thống analytics của Spotify, gồm 4 tầng chính:
+
+1. Giả lập dữ liệu (Producer)
+Script Python tạo 20 user ảo liên tục phát sinh sự kiện nghe nhạc (play, pause, skip, add_to_playlist) mỗi giây và đẩy vào Kafka topic spotify-events. Mỗi event gồm: user_id, song_id, artist, thiết bị, quốc gia, timestamp.
+
+2. Thu gom & lưu trữ thô (Consumer → MinIO)
+Consumer Python gom đủ 10 message thì đóng gói thành 1 file JSON và upload lên MinIO (S3 tự host) theo cấu trúc phân vùng theo ngày/giờ: bronze/date=.../hour=.../spotify_events_....json. Cách này tránh mở kết nối MinIO quá nhiều lần.
+
+3. Hạ tầng (Docker Compose)
+Toàn bộ chạy trên Docker với các service: Zookeeper + Kafka (message queue), Kafdrop (UI xem Kafka), MinIO (data lake), PostgreSQL + Airflow (điều phối pipeline theo lịch).
+
+4. Biến đổi dữ liệu (dbt trên Snowflake)
+Ba tầng xử lý theo kiến trúc Bronze → Silver → Gold:
+
+Bronze: Đọc dữ liệu thô từ Snowflake, lọc bỏ các dòng có trường quan trọng bị null
+Silver → Gold: Tổng hợp thành 2 bảng analytics — thống kê hành vi theo user/ngày và bảng xếp hạng bài hát theo lượt nghe
+Luồng tổng thể: Giả lập → Kafka → MinIO (bronze) → Snowflake → dbt transform → Dashboard/Analytics
+
+
+
+
+
+

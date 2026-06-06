@@ -1,0 +1,17 @@
+🔧 Phức tạp hóa pipeline kỹ thuật
+1. Thêm tầng Streaming thực sự với Spark Structured Streaming
+Hiện tại consumer của bạn chỉ là Python đơn giản gom batch 10 message. Thay bằng PySpark Structured Streaming đọc trực tiếp từ Kafka, xử lý window aggregation (ví dụ: đếm lượt play theo từng cửa sổ 1 phút), rồi mới ghi xuống MinIO. Đây là điểm cộng lớn vì đây là kỹ năng thực tế trong industry.
+2. Schema validation với Apache Avro hoặc JSON Schema
+Trước khi lưu xuống Bronze, thêm bước validate schema — nếu event thiếu field hoặc sai kiểu dữ liệu thì route sang một "dead letter queue" riêng thay vì âm thầm bỏ qua. Giúp pipeline có tính production-ready hơn nhiều.
+3. Data quality check trong dbt
+Thêm file schema.yml với các test như not_null, unique, accepted_values cho các cột quan trọng. Khi chạy dbt test mà fail thì Airflow tự động dừng pipeline. Rất dễ làm nhưng gây ấn tượng tốt với giáo viên.
+4. Orchestration chặt chẽ hơn với Airflow
+Hiện tại Airflow có trong docker-compose nhưng chưa thấy DAG nào. Tạo DAG kết nối toàn bộ: trigger dbt run → dbt test → nếu pass thì load lên Snowflake → gửi alert Slack/email nếu fail.
+
+📊 Thêm tính năng Analytics / ML
+5. Real-time recommendation đơn giản
+Dùng Collaborative Filtering (thư viện surprise hoặc implicit) train trên dữ liệu Gold để gợi ý bài hát tiếp theo cho mỗi user. Không cần phức tạp, chỉ cần chứng minh được "pipeline data này có thể phục vụ ML".
+6. Anomaly detection trên stream
+Phát hiện bất thường trong luồng event — ví dụ nếu 1 user skip liên tục 20 bài trong 1 phút thì flag là bot. Dùng rolling window trong Spark hoặc thậm chí logic đơn giản trong dbt cũng được.
+7. Dashboard visualization
+Kết nối Snowflake với Apache Superset hoặc Metabase (cả hai đều có Docker image) để vẽ biểu đồ top bài hát, phân bố user theo quốc gia, giờ cao điểm. Phần này rất "ăn điểm" khi demo vì giáo viên nhìn thấy ngay kết quả.

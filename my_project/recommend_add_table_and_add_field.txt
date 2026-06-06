@@ -1,0 +1,46 @@
+Đề xuất cấu trúc bảng cho nhóm bạn
+Dimension tables (4 bảng):
+BảngCột chínhdim_usersuser_id, country, device_typedim_songssong_id, song_name, artist_namedim_devicesdevice_typedim_datedate, hour, day_of_week, is_weekend
+
+
+
+
+Fact table (1 bảng):
+BảngCột chínhfact_play_eventsevent_id, user_id, song_id, device_type, date_key, event_type, timestamp
+
+python# Hiện tại mỗi event có
+"user_id", "song_id", "artist_name", "song_name",
+"event_type", "device_type", "country", "timestamp"
+
+update faker producer.py
+
+song_artist_pairs = [
+    {
+        "artist": "The Weeknd",
+        "song": "Blinding Lights",
+        "song_id": "...",
+        "genre": "Pop",
+        "duration_seconds": 200,
+        "release_year": 2019,
+        "language": "English",
+        "is_explicit": False,
+        "album_name": "After Hours"
+    },
+    ...
+]
+
+def generate_event():
+    return {
+        # fields cũ
+        "user_id": ...,
+        "country": ...,
+
+        # fields mới cho user
+        "username": fake.user_name(),
+        "age": random.randint(16, 45),
+        "gender": random.choice(["M", "F", "Other"]),
+        "subscription_type": random.choice(["free", "premium"]),
+        "registration_date": fake.date_between(
+            start_date="-3y", end_date="today"
+        ).isoformat(),
+    }

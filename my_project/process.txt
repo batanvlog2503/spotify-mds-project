@@ -1,0 +1,336 @@
+📋 Lộ trình 5 bước — thứ tự quan trọng
+
+Bước 1 — Cập nhật Faker Producer (30 phút)
+Làm trước vì tất cả các bước sau đều phụ thuộc vào dữ liệu đầu vào.
+Thêm các field mới vào generate_event():
+python# Thêm vào song_artist_pairs
+{"artist": "The Weeknd", "song": "Blinding Lights",
+ "genre": "Pop", "duration_seconds": 200,
+ "release_year": 2019, "album_name": "After Hours"}
+
+# Thêm vào generate_event()
+"username":          fake.user_name(),
+"age":               random.randint(16, 45),
+"subscription_type": random.choice(["free", "premium"]),
+"genre":             pair["genre"],
+"duration_seconds":  pair["duration_seconds"],
+"release_year":      pair["release_year"],
+Xong bước này: dữ liệu mới sẽ chảy vào Kafka với đầy đủ fields.
+
+Bước 2 — Spark Streaming thay Consumer Python (1-2 ngày)
+Tạo file spark_streaming_job.py mới, không xóa consumer.py cũ — giữ để fallback.
+pythonfrom pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, current_timestamp
+from pyspark.sql.types import *
+
+spark = SparkSession.builder \
+    .appName("SpotifyStreaming") \
+    .config("spark.jars.packages",
+        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,"
+        "org.apache.hadoop:hadoop-aws:3.3.4") \
+    .getOrCreate()
+
+schema = StructType([
+    StructField("event_id",          StringType()),
+    StructField("user_id",           StringType()),
+    StructField("song_id",           StringType()),
+    StructField("artist_name",       StringType()),
+    StructField("song_name",         StringType()),
+    StructField("event_type",        StringType()),
+    StructField("device_type",       StringType()),
+    StructField("country",           StringType()),
+    StructField("timestamp",         StringType()),
+    StructField("genre",             StringType()),
+    StructField("subscription_type", StringType()),
+    StructField("age",               IntegerType()),
+    StructField("duration_seconds",  IntegerType()),
+])
+
+df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "kafka:9092") \
+    .option("subscribe", "spotify-events") \
+    .load()
+
+parsed = df.select(
+    from_json(col("value").cast("string"), schema).alias("data")
+).select("data.*") \
+ .withColumn("processed_at", current_timestamp())
+
+# Tách luồng sạch và bẩn ngay tại đây
+clean_df = parsed.filter(
+    col("event_id").isNotNull() &
+    col("user_id").isNotNull() &
+    col("song_id").isNotNull() &
+    col("timestamp").isNotNull()
+)
+
+dirty_df = parsed.filter(
+    col("event_id").isNull() |
+    col("user_id").isNull() |
+    col("song_id").isNull() |
+    col("timestamp").isNull()
+)
+
+# Ghi clean xuống MinIO bronze
+clean_df.writeStream \
+    .format("json") \
+    .option("path", "s3a://your-bucket/bronze/clean/") \
+    .option("checkpointLocation", "s3a://your-bucket/checkpoint/clean/") \
+    .partitionBy("country") \
+    .outputMode("append") \
+    .start()
+
+# Ghi dirty xuống MinIO quarantine
+dirty_df.writeStream \
+    .format("json") \
+    .option("path", "s3a://your-bucket/bronze/quarantine/") \
+    .option("checkpointLocation", "s3a://your-bucket/checkpoint/quarantine/") \
+    .outputMode("append") \
+    .start()
+
+spark.streams.awaitAnyTermination()
+Thêm vào docker-compose.yml:
+yamlspark-master:
+  image: bitnami/spark:3.5
+  container_name: spark-master
+  environment:
+    - SPARK_MODE=master
+  ports:
+    - "8090:8080"
+  mem_limit: 1g
+
+spark-worker:
+  image: bitnami/spark:3.5
+  container_name: spark-worker
+  environment:
+    - SPARK_MODE=worker
+    - SPARK_MASTER_URL=spark://spark-master:7077
+  mem_limit: 2g
+  depends_on:
+    - spark-master
+Xong bước này: Spark thay Consumer Python, dữ liệu clean/dirty tách sẵn từ đầu vào MinIO.
+
+Bước 3 — dbt: Quarantine + Dim tables + 6 Gold tables (1 ngày)
+Làm theo thứ tự: Silver sửa trước → Dim tables → Gold tables.
+3a. Sửa Silver — thêm field mới, bỏ filter null (để Quarantine xử lý):
+sql-- models/silver/spotify_silver.sql
+with raw as (
+    select * from {{ source('bronze', 'spotify_events_bronze') }}
+)
+select
+    event_id, user_id, song_id,
+    artist_name, song_name, event_type,
+    device_type, country,
+    TRY_TO_TIMESTAMP_TZ(timestamp) as event_ts,
+    genre, subscription_type, age, duration_seconds,
+    processed_at
+from raw
+where event_id is not null
+  and user_id   is not null
+  and song_id   is not null
+  and event_ts  is not null
+3b. Thêm Quarantine model:
+sql-- models/silver/quarantine_events.sql
+with raw as (
+    select * from {{ source('bronze', 'spotify_events_bronze') }}
+)
+select *,
+    case
+        when event_id  is null then 'missing event_id'
+        when user_id   is null then 'missing user_id'
+        when song_id   is null then 'missing song_id'
+        when timestamp is null then 'missing timestamp'
+        else 'invalid timestamp'
+    end as reject_reason,
+    current_timestamp() as rejected_at
+from raw
+where event_id  is null
+   or user_id   is null
+   or song_id   is null
+   or TRY_TO_TIMESTAMP_TZ(timestamp) is null
+3c. Dim tables:
+sql-- models/gold/dim_users.sql
+select distinct
+    user_id, country, device_type,
+    subscription_type, age
+from {{ ref('spotify_silver') }}
+
+-- models/gold/dim_songs.sql
+select distinct
+    song_id, song_name, artist_name,
+    genre, duration_seconds
+from {{ ref('spotify_silver') }}
+
+-- models/gold/dim_date.sql
+select distinct
+    date_trunc('hour', event_ts)          as date_hour,
+    to_date(event_ts)                      as date_day,
+    extract(hour from event_ts)            as hour,
+    extract(dow  from event_ts)            as day_of_week,
+    case when extract(dow from event_ts)
+         in (0,6) then true else false end as is_weekend
+from {{ ref('spotify_silver') }}
+3d. 6 Gold tables còn lại:
+sql-- models/gold/gold_artist_performance.sql
+select
+    artist_name,
+    count(case when event_type='play' then 1 end)  as total_plays,
+    count(case when event_type='skip' then 1 end)  as total_skips,
+    round(count(case when event_type='skip' then 1 end)
+        / nullif(count(case when event_type='play' then 1 end),0), 2)
+                                                    as skip_rate,
+    count(distinct user_id)                         as unique_listeners
+from {{ ref('spotify_silver') }}
+group by artist_name
+
+-- models/gold/gold_user_loyalty.sql
+select
+    user_id,
+    count(distinct to_date(event_ts)) as active_days,
+    case
+        when count(distinct to_date(event_ts)) >= 5 then 'Power'
+        when count(distinct to_date(event_ts)) >= 3 then 'Regular'
+        else 'Casual'
+    end as loyalty_tier
+from {{ ref('spotify_silver') }}
+group by user_id
+
+-- models/gold/gold_churn_risk.sql
+select
+    user_id,
+    max(to_date(event_ts))  as last_active_date,
+    datediff(day, max(to_date(event_ts)), current_date()) as days_inactive,
+    round(count(case when event_type='skip' then 1 end)
+        / nullif(count(*), 0), 2)                  as skip_rate,
+    case
+        when datediff(day, max(to_date(event_ts)),
+             current_date()) > 7  then 'high'
+        when skip_rate > 0.7      then 'medium'
+        else 'low'
+    end as churn_risk
+from {{ ref('spotify_silver') }}
+group by user_id
+
+-- models/gold/gold_peak_hours.sql
+select
+    country,
+    extract(hour from event_ts) as hour,
+    count(*)                    as total_events
+from {{ ref('spotify_silver') }}
+where event_type = 'play'
+group by country, hour
+order by country, total_events desc
+
+-- models/gold/gold_country_stats.sql
+select
+    country,
+    count(case when event_type='play' then 1 end) as total_plays,
+    count(distinct user_id)                        as unique_users,
+    mode(device_type)                              as top_device
+from {{ ref('spotify_silver') }}
+group by country
+
+-- models/gold/gold_playlist_conversion.sql
+select
+    song_id, song_name, artist_name,
+    count(case when event_type='play'            then 1 end) as plays,
+    count(case when event_type='add_to_playlist' then 1 end) as playlist_adds,
+    round(count(case when event_type='add_to_playlist' then 1 end)
+        / nullif(count(case when event_type='play' then 1 end),0), 2)
+                                                              as conversion_rate
+from {{ ref('spotify_silver') }}
+group by song_id, song_name, artist_name
+order by conversion_rate desc
+3e. Thêm dbt tests vào schema.yml:
+yamlmodels:
+  - name: spotify_silver
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: event_type
+        tests:
+          - accepted_values:
+              values: ['play','pause','skip','add_to_playlist']
+      - name: user_id
+        tests: [not_null]
+Xong bước này: 13 bảng tổng (3 dim + 8 gold + silver + quarantine), data quality tự động.
+
+Bước 4 — MLflow + Prophet (1 ngày)
+Thêm vào docker-compose.yml:
+yamlmlflow:
+  image: ghcr.io/mlflow/mlflow:latest
+  container_name: mlflow
+  ports:
+    - "5000:5000"
+  command: mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db
+  mem_limit: 512m
+Tạo file scripts/train_forecast.py:
+pythonimport mlflow
+import mlflow.prophet
+import pandas as pd
+from prophet import Prophet
+import snowflake.connector
+import os
+
+mlflow.set_tracking_uri("http://mlflow:5000")
+mlflow.set_experiment("spotify_song_forecast")
+
+# Đọc từ Gold table
+conn = snowflake.connector.connect(...)
+df = pd.read_sql("""
+    select date_day as ds, total_plays as y
+    from gold_song_popularity
+    order by ds
+""", conn)
+
+with mlflow.start_run():
+    model = Prophet(yearly_seasonality=True,
+                    weekly_seasonality=True)
+    model.fit(df)
+
+    future  = model.make_future_dataframe(periods=7)
+    forecast = model.predict(future)
+
+    # Log metrics
+    mae = (forecast['yhat'] - df['y']).abs().mean()
+    mlflow.log_metric("mae", mae)
+    mlflow.log_param("forecast_periods", 7)
+    mlflow.prophet.log_model(model, "prophet_model")
+
+    print(f"MAE: {mae:.2f}")
+    print("Model logged to MLflow")
+Thêm task vào Airflow DAG:
+pythonfrom airflow.operators.bash import BashOperator
+
+train_ml_task = BashOperator(
+    task_id="train_forecast_model",
+    bash_command="python /opt/airflow/scripts/train_forecast.py"
+)
+
+# Cập nhật thứ tự
+extract_task >> load_task >> dbt_run >> dbt_test >> train_ml_task
+Xong bước này: MLflow UI tại localhost:5000, track MAE/RMSE mỗi lần chạy.
+
+Bước 5 — Metabase Dashboard (2-3 giờ)
+Thêm vào docker-compose.yml:
+yamlmetabase:
+  image: metabase/metabase:latest
+  container_name: metabase
+  ports:
+    - "3000:3000"
+  mem_limit: 512m
+Kết nối Snowflake trong Metabase UI rồi tạo 4 chart cơ bản:
+ChartDùng bảngLoạiTop 10 bài hátgold_song_popularityBar chartUser loyalty piegold_user_loyaltyPie chartPeak hours heatmapgold_peak_hoursHeatmapForecast lượt ngheOutput ProphetLine chart
+
+✅ Checklist tổng kết
+□ Bước 1 — Faker Producer thêm fields mới       (~30 phút)
+□ Bước 2 — Spark Streaming + docker-compose      (~1-2 ngày)
+□ Bước 3a — Silver sửa + thêm fields            (~30 phút)
+□ Bước 3b — Quarantine model                     (~20 phút)
+□ Bước 3c — 3 Dim tables                         (~30 phút)
+□ Bước 3d — 6 Gold tables còn lại               (~1 ngày)
+□ Bước 3e — dbt schema.yml tests                 (~20 phút)
+□ Bước 4 — MLflow + Prophet + Airflow task       (~1 ngày)
+□ Bước 5 — Metabase + 4 charts                  (~2-3 giờ)
+Bạn muốn bắt đầu từ bước nào thì mình hỗ trợ code chi tiết luôn!

@@ -1,0 +1,102 @@
+┌─────────────────────────────────────────────────────┐
+│                  INGESTION LAYER                     │
+│         Faker Producer → Kafka → Zookeeper           │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│               STREAM PROCESSING                      │
+│            Consumer Python (batch 10)                │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│            DATA LAKE - BRONZE (MinIO)                │
+│     bronze/date=.../hour=.../events.json             │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│           AIRFLOW DAG (chạy hourly)                  │
+│   Task 1: extract_from_minio() → /tmp/raw.json       │
+│   Task 2: load_raw_to_snowflake() → Bronze table     │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│              dbt TRANSFORM LAYER                     │
+│                                                      │
+│  Bronze Table (Snowflake)                            │
+│         ↓                                            │
+│  ┌──────┴───────┐                                    │
+│  ↓              ↓                                    │
+│  Silver       Quarantine ◄── MỚI                    │
+│  (sạch)       (bẩn + lý do reject)                  │
+│     ↓                                                │
+│  Gold Layer (8 tables)                               │
+│  ├── gold_song_popularity                            │
+│  ├── gold_artist_performance                         │
+│  ├── gold_user_behavior_daily                        │
+│  ├── gold_user_loyalty                               │
+│  ├── gold_churn_risk                                 │
+│  ├── gold_peak_hours                                 │
+│  ├── gold_country_stats                              │
+│  └── gold_playlist_conversion                        │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│             MLOps LAYER ◄── MỚI                     │
+│                                                      │
+│  Airflow trigger script Python:                      │
+│  ├── Đọc Gold tables từ Snowflake                    │
+│  ├── Train model (Prophet/SARIMA)                    │
+│  │   ├── Dự báo lượt nghe tuần tới                  │
+│  │   ├── Dự báo giờ cao điểm                        │
+│  │   └── Phát hiện user churn                       │
+│  └── MLflow tracking:                                │
+│      ├── Log metrics (MAE, RMSE)                     │
+│      ├── Log model artifact                          │
+│      └── UI tại localhost:5000                       │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│              VISUALIZATION LAYER                     │
+│         Superset / Metabase Dashboard                │
+│   ├── Top bài hát real-time                         │
+│   ├── Bản đồ user theo quốc gia                     │
+│   └── Forecast chart (từ MLflow model)              │
+└─────────────────────────────────────────────────────┘
+
+
+Thêm vào docker-compose
+Chỉ cần thêm 2 service nhỏ:
+yamlmlflow:
+  image: ghcr.io/mlflow/mlflow:latest
+  container_name: mlflow
+  ports:
+    - "5000:5000"
+  command: mlflow server --host 0.0.0.0
+  mem_limit: 512m
+Superset hoặc Metabase chọn 1:
+yamlmetabase:
+  image: metabase/metabase:latest
+  container_name: metabase
+  ports:
+    - "3000:3000"
+  mem_limit: 512m
+
+
+┌─────────────────────────────────────────────────────┐
+│                  INGESTION LAYER                     │
+│         Faker Producer → Kafka → Zookeeper           │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│          STREAM PROCESSING ◄── SPARK VÀO ĐÂY        │
+│                                                      │
+│   Hiện tại: Consumer Python (gom 10 msg → MinIO)    │
+│                    ↓ thay bằng                       │
+│   Spark Structured Streaming:                        │
+│   ├── Đọc stream trực tiếp từ Kafka                 │
+│   ├── Validate schema (đúng kiểu dữ liệu không)     │
+│   ├── Enrich data (thêm cột processed_at...)        │
+│   └── Ghi xuống MinIO theo partition                │
+└──────────────────────┬──────────────────────────────┘
+                       ↓
+                   MinIO (Bronze)

@@ -1,0 +1,67 @@
+
+Bước 1 — Kiểm tra Python đã cài chưa
+bashpython --version
+# Cần >= 3.9
+Nếu chưa có thì tải tại python.org, nhớ tick "Add Python to PATH" khi cài.
+
+Bước 2 — Mở terminal tại thư mục project
+bash# Ví dụ project của bạn ở
+cd D:\projects\spotify-pipeline
+
+Bước 3 — Tạo virtual environment
+bashpython -m venv .venv
+Lệnh này tạo thư mục .venv trong project, chứa Python riêng biệt.
+
+Bước 4 — Kích hoạt
+bash# Windows CMD
+.venv\Scripts\activate
+
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+Sau khi kích hoạt terminal sẽ hiện prefix .venv:
+(.venv) D:\projects\spotify-pipeline>
+Nếu PowerShell báo lỗi "cannot be loaded because running scripts is disabled":
+bashSet-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Sau đó chạy lại Activate.ps1
+
+Bước 5 — Cài thư viện
+bashpip install --upgrade pip
+
+pip install kafka-python==2.0.2 \
+            faker==24.0.0 \
+            pyspark==3.5.0 \
+            boto3==1.34.0 \
+            snowflake-connector-python==3.7.0 \
+            dbt-core==1.7.0 \
+            dbt-snowflake==1.7.0 \
+            mlflow==2.11.0 \
+            prophet==1.1.5 \
+            pandas==2.2.0 \
+            scikit-learn==1.4.0 \
+            python-dotenv==1.0.0
+Hoặc nếu đã có requirements.txt:
+bashpip install -r requirements.txt
+
+Bước 6 — Kiểm tra đã cài đúng chưa
+bashpip list
+# Sẽ thấy danh sách tất cả thư viện vừa cài
+
+Bước 7 — Thêm .venv vào .gitignore
+bash# File .gitignore
+.venv/
+__pycache__/
+*.pyc
+.env
+Không nên push .venv lên Git vì nặng và mỗi máy tự cài lại được.
+
+Tắt .venv khi xong
+bashdeactivate
+
+Lưu ý với PySpark trên Windows
+PySpark cần Java 11+, kiểm tra:
+bashjava -version
+Nếu chưa có thì tải Adoptium JDK 11, sau khi cài thêm biến môi trường:
+JAVA_HOME = C:\Program Files\Eclipse Adoptium\jdk-11.x.x
+Thêm vào PATH:
+%JAVA_HOME%\bin
+Bạn đang dùng CMD hay PowerShell? Mình hỗ trợ thêm nếu gặp lỗi.

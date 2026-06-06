@@ -1,0 +1,77 @@
+📦 Theo từng bước
+Bước 1 — Faker Producer (đã có, kiểm tra lại)
+bashpip install kafka-python faker python-dotenv
+Bước 2 — Spark Streaming
+bashpip install pyspark==3.5.0 boto3
+Spark cần thêm JAR packages — khai báo trong code, không cần pip:
+python# Trong SparkSession config
+"spark.jars.packages",
+"org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,"
+"org.apache.hadoop:hadoop-aws:3.3.4"
+Bước 3 — Airflow DAG (đã có, thêm)
+bashpip install apache-airflow
+pip install apache-airflow-providers-snowflake  # trigger dbt từ Airflow
+pip install snowflake-connector-python
+pip install boto3
+Bước 4 — dbt
+bashpip install dbt-core
+pip install dbt-snowflake   # adapter kết nối Snowflake
+Bước 5 — MLflow + Prophet
+bashpip install mlflow
+pip install prophet
+pip install pandas
+pip install snowflake-connector-python
+Bước 6 — Metabase
+Metabase không cần pip — chạy hoàn toàn qua Docker, không cần cài gì thêm.
+
+📄 File requirements.txt hoàn chỉnh
+txt# Kafka
+kafka-python==2.0.2
+
+# Data generation
+faker==24.0.0
+
+# Spark
+pyspark==3.5.0
+
+# AWS S3 / MinIO
+boto3==1.34.0
+
+# Airflow
+apache-airflow==2.9.3
+apache-airflow-providers-snowflake==5.3.0
+
+# Snowflake
+snowflake-connector-python==3.7.0
+
+# dbt
+dbt-core==1.7.0
+dbt-snowflake==1.7.0
+
+# MLflow + ML
+mlflow==2.11.0
+prophet==1.1.5
+pandas==2.2.0
+scikit-learn==1.4.0   # dùng cho metrics MAE/RMSE
+
+# Utils
+python-dotenv==1.0.0
+
+⚠️ Lưu ý quan trọng
+Prophet cần thêm dependency hệ thống trước khi pip install:
+bash# Ubuntu/Debian
+sudo apt-get install python3-dev libpython3-dev
+
+# MacOS
+brew install gcc
+PySpark cần Java 11+:
+bash# Kiểm tra
+java -version
+
+# Cài nếu chưa có (Ubuntu)
+sudo apt install openjdk-11-jdk
+dbt-snowflake và snowflake-connector hay conflict version — nên cài trong virtual environment riêng:
+bashpython -m venv venv
+source venv/bin/activate   # MacOS/Linux
+venv\Scripts\activate      # Windows
+pip install -r requirements.txt

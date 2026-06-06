@@ -1,0 +1,19 @@
+Quarantine Layer là gì?
+Đây là tầng cách ly dữ liệu bẩn thay vì xóa đi:
+Bronze (raw)
+    ↓ filter
+    ├──► Silver (sạch, dùng được)
+    └──► Quarantine (bẩn, lưu lại để audit)
+Ví dụ dữ liệu bị đẩy vào Quarantine trong project của bạn:
+sql-- Hiện tại bạn đang XÓA luôn
+WHERE event_id IS NOT NULL
+AND user_id IS NOT NULL
+AND event_ts IS NOT NULL
+
+-- Production thực tế nên TÁCH ra
+-- Bảng quarantine_events chứa những dòng này kèm lý do tại sao bị reject
+Bảng quarantine trông như thế này:
+event_iduser_idreasonrejected_atnullabc123missing event_id2026-06-06xyz789nullmissing user_id2026-06-06def456abc123invalid timestamp2026-06-06
+Tại sao quan trọng? Vì trong thực tế khi dữ liệu bị mất, team data engineer cần quay lại audit xem tại sao — nếu xóa luôn thì không trace được.
+
+Bạn muốn mình viết code cho cái nào trước — Quarantine layer trong dbt hay MLflow + model dự báo?
