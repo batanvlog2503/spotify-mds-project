@@ -1,0 +1,27 @@
+Đây là Spark đang tự động tải JAR về máy — hoàn toàn bình thường, không phải lỗi!
+
+Giải thích từng dòng
+# Spark đọc config spark.jars.packages và bắt đầu tải
+org.apache.spark#spark-sql-kafka-0-10_2.12 added as a dependency
+org.apache.hadoop#hadoop-aws added as a dependency
+com.amazonaws#aws-java-sdk-bundle added as a dependency
+→ 3 JAR bạn khai báo trong code đã được nhận diện
+# Spark tìm thêm các JAR phụ thuộc cần thiết
+found org.apache.kafka#kafka-clients;3.4.1 in central
+found org.lz4#lz4-java;1.8.0 in central
+found org.xerial.snappy#snappy-java;1.1.10.3 in central
+...
+→ Giống như pip install pyspark tự kéo thêm các thư viện phụ
+# Đang tải về máy
+downloading spark-sql-kafka...jar  → [SUCCESSFUL]
+downloading hadoop-aws...jar       → [SUCCESSFUL]
+downloading aws-java-sdk-bundle... → đang tải (file lớn ~300MB)
+→ File tải về lưu tại C:\Users\Admin\.ivy2\jars\
+
+Cần làm gì?
+Không cần làm gì cả — chờ tải xong là Spark tự chạy tiếp.
+Lần đầu  : tải ~5-10 phút (tùy internet), file ~400MB tổng
+Lần sau  : dùng cache trong .ivy2/ → chạy ngay, không tải lại
+
+Lưu ý quan trọng
+aws-java-sdk-bundle là file nặng nhất (~250MB) — đang tải dở ở dòng cuối. Bạn cứ để yên chờ dòng [SUCCESSFUL] xuất hiện là xong. Đừng tắt terminal lúc này.

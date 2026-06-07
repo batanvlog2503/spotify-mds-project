@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: spotify_silver
+    description: "Dữ liệu đã clean từ Bronze table"
+    columns:
+      - name: event_id
+        description: "ID duy nhất mỗi lần nghe"
+        tests: [not_null, unique]
+
+      - name: user_id
+        description: "ID người dùng"
+        tests: [not_null]
+
+      - name: song_id
+        description: "ID bài hát"
+        tests: [not_null]
+
+      - name: event_type
+        description: "Loại hành động"
+        tests:
+          - accepted_values:
+              values: ['play', 'pause', 'skip', 'add_to_playlist']
+
+      - name: event_ts
+        description: "Thời điểm xảy ra event"
+        tests: [not_null]
+
+      - name: subscription_type
+        description: "Loại tài khoản"
+        tests:
+          - accepted_values:
+              values: ['free', 'premium']
+
+      - name: country
+        description: "Quốc gia người dùng"
+        tests:
+          - accepted_values:
+              values: ['US', 'UK', 'CA', 'AU', 'IN', 'DE', 'VN', 'JP']

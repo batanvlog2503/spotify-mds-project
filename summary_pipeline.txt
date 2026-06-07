@@ -20,7 +20,9 @@ Silver → Gold: Tổng hợp thành 2 bảng analytics — thống kê hành vi
 Luồng tổng thể: Giả lập → Kafka → MinIO (bronze) → Snowflake → dbt transform → Dashboard/Analytics
 
 
-
+1. Chạy Producer để sinh dữ liệu
+2. Sau đó bật Comsumer để stream kafka lưu dữ liệu vào minio (kafka-to-minio)
+3. Bật http://localhost:8080/home để bật airflow để hút vào snowflake 1hourly (không caanf chạy minio-to-snowflake
 
 
 

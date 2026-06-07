@@ -1,0 +1,210 @@
+Show more
+10:35
+File này để ở đâu
+spotify_dbt/
+└── models/
+    ├── sources.yml
+    ├── schema.yml          ← tạo file này ở đây
+    ├── silver/
+    │   ├── spotify_silver.sql
+    │   └── quarantine_events.sql
+    └── gold/
+        └── ...
+Để làm gì
+schema.yml chứa các test tự động — khi chạy dbt test thì dbt kiểm tra dữ liệu trong bảng Silver có đúng không:
+
+dbt test
+   ↓
+Kiểm tra event_id    → không được NULL, không được trùng
+Kiểm tra user_id     → không được NULL
+Kiểm tra event_type  → chỉ được là play/pause/skip/add_to_playlist
+   ↓
+Pass → ✅ pipeline tiếp tục
+Fail → ❌ Airflow dừng lại, báo lỗi
+Ví dụ thực tế
+Giả sử Producer bị lỗi gửi event_type = "like" không có trong danh sách:
+
+Không có dbt test → data bẩn chui thẳng vào Gold tables
+                  → báo cáo sai mà không biết
+
+Có dbt test       → dbt test FAIL ngay tại Silver
+                  → Airflow dừng pipeline
+                  → bạn biết có data bẩn để fix
+File schema.yml đầy đủ nên có
+yaml
+version: 2
+
+models:
+  - name: spotify_silver
+    description: "Dữ liệu đã clean từ Bronze table"
+    columns:
+      - name: event_id
+        description: "ID duy nhất mỗi lần nghe"
+        tests: [not_null, unique]
+
+      - name: user_id
+        description: "ID người dùng"
+        tests: [not_null]
+
+      - name: song_id
+        description: "ID bài hát"
+        tests: [not_null]
+
+      - name: event_type
+        description: "Loại hành động"
+        tests:
+          - accepted_values:
+              values: ['play', 'pause', 'skip', 'add_to_playlist']
+
+      - name: event_ts
+        description: "Thời điểm xảy ra event"
+        tests: [not_null]
+
+      - name: subscription_type
+        description: "Loại tài khoản"
+        tests:
+          - accepted_values:
+              values: ['free', 'premium']
+
+      - name: country
+        description: "Quốc gia người dùng"
+        tests:
+          - accepted_values:
+              values: ['US', 'UK', 'CA', 'AU', 'IN', 'DE', 'VN', 'JP']
+Cách chạy
+bash
+# Chạy transform
+dbt run
+
+# Chạy test sau khi transform
+dbt test
+
+# Hoặc chạy cả 2 cùng lúc
+dbt build
+Trong Airflow DAG sau này sẽ trigger theo thứ tự:
+
+dbt run → dbt test → (pass) → train ML model
+                   → (fail) → dừng + alert
+Bạn đã cài dbt và có file profiles.yml kết nối Snowflake chưa?
+
+(.venv) PS D:\spotify-mds-project> cd spotify_dbt
+(.venv) PS D:\spotify-mds-project\spotify_dbt> cd Phamtan2503
+(.venv) PS D:\spotify-mds-project\spotify_dbt\Phamtan2503> dbt run
+03:37:32  Running with dbt=1.7.0
+03:37:38  Registered adapter: snowflake=1.7.0
+03:37:38  Unable to do partial parsing because of a version mismatch
+03:37:42  Found 15 models, 8 tests, 1 source, 0 exposures, 0 metrics, 430 macros, 0 groups, 0 semantic models
+03:37:42
+03:37:46  Concurrency: 3 threads (target='dev')
+03:37:46
+03:37:46  1 of 15 START sql table model transform.my_first_dbt_model ..................... [RUN]
+03:37:46  2 of 15 START sql view model transform.quarantine_events ....................... [RUN]
+03:37:46  3 of 15 START sql view model transform.spotify_silver .......................... [RUN]
+03:37:47  2 of 15 OK created sql view model transform.quarantine_events .................. [SUCCESS 1 in 0.97s]
+03:37:47  3 of 15 ERROR creating sql view model transform.spotify_silver ................. [ERROR in 1.12s]
+03:37:47  4 of 15 SKIP relation transform.dim_date ....................................... [SKIP]
+03:37:47  5 of 15 SKIP relation transform.dim_songs ...................................... [SKIP]
+03:37:47  6 of 15 SKIP relation transform.dim_users ...................................... [SKIP]
+03:37:47  7 of 15 SKIP relation transform.gold_artist_performance ........................ [SKIP]
+03:37:47  8 of 15 SKIP relation transform.gold_churn_risk ................................ [SKIP]
+03:37:47  9 of 15 SKIP relation transform.gold_country_stats ............................. [SKIP]
+03:37:47  10 of 15 SKIP relation transform.gold_peak_hours ............................... [SKIP]
+03:37:47  11 of 15 SKIP relation transform.gold_playlist_conversion ...................... [SKIP]
+03:37:47  1 of 15 OK created sql table model transform.my_first_dbt_model ................ [SUCCESS 1 in 1.14s]
+03:37:47  12 of 15 SKIP relation transform.gold_user_loyalty ............................. [SKIP]
+03:37:47  13 of 15 SKIP relation transform.top_songs ..................................... [SKIP]
+03:37:47  14 of 15 SKIP relation transform.user_engagement ............................... [SKIP]
+03:37:47  15 of 15 START sql view model transform.my_second_dbt_model .................... [RUN]
+03:37:48  15 of 15 OK created sql view model transform.my_second_dbt_model ............... [SUCCESS 1 in 0.68s]
+03:37:48
+03:37:48  Finished running 14 view models, 1 table model in 0 hours 0 minutes and 5.51 seconds (5.51s).
+03:37:48
+03:37:48  Completed with 1 error and 0 warnings:
+03:37:48
+03:37:48    Database Error in model spotify_silver (models\silver\spotify_silver.sql)
+  000904 (42000): SQL compilation error: error line 40 at position 4
+  invalid identifier 'PROCESSED_AT'
+  compiled Code at target\run\Phamtan2503\models\silver\spotify_silver.sql
+03:37:48
+03:37:48  Done. PASS=3 WARN=0 ERROR=1 SKIP=11 TOTAL=15
+(.venv) PS D:\spotify-mds-project\spotify_dbt\Phamtan2503>
+
+là sao
+
+Show more
+10:38
+Lỗi rõ ràng:
+
+invalid identifier 'PROCESSED_AT'
+Cột processed_at không tồn tại trong bảng Bronze trên Snowflake — vì đây là cột Spark thêm vào khi ghi xuống MinIO, nhưng Airflow DAG load lên Snowflake không có cột này trong CREATE TABLE.
+
+Sửa spotify_silver.sql — xóa dòng processed_at
+sql
+-- ❌ Cũ — có processed_at
+with raw as (
+    select * from {{ source('bronze', 'spotify_events_bronze') }}
+)
+select
+    event_id,
+    user_id,
+    song_id,
+    artist_name,
+    song_name,
+    event_type,
+    device_type,
+    country,
+    TRY_TO_TIMESTAMP_TZ(timestamp) as event_ts,
+    username,
+    age,
+    subscription_type,
+    registration_date,
+    genre,
+    duration_seconds,
+    release_year,
+    album_name,
+    processed_at        ← XÓA DÒNG NÀY
+from raw
+where event_id  is not null
+  and user_id   is not null
+  and song_id   is not null
+  and TRY_TO_TIMESTAMP_TZ(timestamp) is not null
+sql
+-- ✅ Mới — bỏ processed_at
+with raw as (
+    select * from {{ source('bronze', 'spotify_events_bronze') }}
+)
+select
+    event_id,
+    user_id,
+    song_id,
+    artist_name,
+    song_name,
+    event_type,
+    device_type,
+    country,
+    TRY_TO_TIMESTAMP_TZ(timestamp) as event_ts,
+    username,
+    age,
+    subscription_type,
+    registration_date,
+    genre,
+    duration_seconds,
+    release_year,
+    album_name
+from raw
+where event_id  is not null
+  and user_id   is not null
+  and song_id   is not null
+  and TRY_TO_TIMESTAMP_TZ(timestamp) is not null
+Sửa xong chạy lại:
+
+bash
+dbt run
+Lần này spotify_silver sẽ pass và các Gold tables sẽ chạy tiếp thay vì SKIP.
+
+
+
+
+
+
+

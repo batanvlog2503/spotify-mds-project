@@ -1,0 +1,71 @@
+Tại sao dùng Spark thay Consumer Python
+
+Tại sao dùng Spark thay Consumer Python?
+                Consumer Python hiện tại         Spark Structured Streaming
+Xử lý               1 luồng đơn                     Multi-worker song song
+Validate schema     ❌ Không có                  ✅ Khai báo schema rõ ràng
+Tách clean/dirty    ✅ Vừa thêm vào              ✅ Tự nhiên hơn với filter
+Fault tolerance     ❌ Crash mất data            ✅ Checkpoint tự phục hồi
+Scale               ❌ 1 process duy nhất        ✅ Thêm worker là scale ngay
+Production-ready    ❌                           ✅
+Phù hợp bài tập     Đơn giản                      Gây ấn tượng hơn nhiều
+
+Nói đơn giản: Consumer Python giống 1 người đứng bắt bóng, Spark giống cả đội bóng phân công bắt —
+ cùng 1 việc nhưng nhanh hơn, chắc hơn, không bị mất bóng.
+
+
+ Trước khi có Spark — Consumer PythonProducer → Kafka → Consumer Python → MinIO
+                        ↑
+                   Gom đủ 10 msg
+                   Đóng gói JSON
+                   Upload lên MinIOConsumer Python làm 1 việc đơn giản: gom đủ 10 message rồi ném lên MinIO. Không validate, không xử lý gì thêm.
+
+
+Sau khi có Spark — Spark Streaming
+Producer → Kafka → Spark Streaming → MinIO
+                        ↑
+                   Đọc stream liên tục
+                   Validate schema
+                   Tách clean/dirty
+                   Ghi xuống MinIO
+
+Nhiệm vụ cụ thể của Spark trong pipeline này
+Kafka (raw bytes)
+    ↓
+Spark nhận message
+    ↓
+Parse JSON theo schema 17 field
+    ↓
+Kiểm tra field bắt buộc
+    ├── Đủ field → clean_df → bronze/clean/
+    └── Thiếu field → dirty_df → bronze/quarantine/
+    ↓
+MinIO lưu 2 thư mục riêng
+
+
+
+Luồng tổng thể sau khi có Spark
+Producer (tạo data giả)
+    ↓
+Kafka (hàng đợi message)
+    ↓
+Spark Streaming (xử lý + validate)
+    ├──→ bronze/clean/      (data sạch)
+    └──→ bronze/quarantine/ (data bẩn)
+    ↓
+Airflow (mỗi giờ)
+    ├── đọc bronze/clean/      → Snowflake Bronze table
+    └── đọc bronze/quarantine/ → Snowflake Quarantine table
+    ↓
+dbt (transform)
+    ├── Silver (clean thêm lần nữa)
+    └── Gold  (8 bảng analytics)
+    ↓
+Dashboard (Metabase)
+
+Tóm lại 1 câu
+
+Consumer Python chỉ vận chuyển data thô — Spark vừa vận chuyển vừa kiểm tra chất lượng và phân loại data trước khi lưu xuống.
+
+Giống như thay xe tải chở hàng không kiểm tra bằng dây chuyền nhà máy có kiểm định chất lượng.
+Bạn đang bị lỗi gì ở bước nào — MinIO chưa có file hay Airflow chưa trigger?You've used 90% of your session limit

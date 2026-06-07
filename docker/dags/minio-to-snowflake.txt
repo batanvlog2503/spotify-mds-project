@@ -34,10 +34,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET")
 # thùng chứa S3 bucket
-
-# ✅ THÊM MỚI: tách 2 prefix riêng thay vì 1 MINIO_PREFIX chung
-MINIO_PREFIX_CLEAN      = os.getenv("MINIO_PREFIX_CLEAN",      "bronze/clean/")
-MINIO_PREFIX_QUARANTINE = os.getenv("MINIO_PREFIX_QUARANTINE",  "bronze/quarantine/")
+MINIO_PREFIX = os.getenv("MINIO_PREFIX")
 # thư mục con bên trong cái giỏ. Dùng để định tuyến
 # xem dữ liệu nào sẽ được cất vào đâu để tránh lẫn lộn
 
@@ -58,17 +55,12 @@ SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE")
 #tên của CSDL databse lớn nhất
 SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA")
 # lớp trung gian Schema dùng để gom nhóm các bảng có cùng chủ đề lại với nhau
-
-# ✅ THÊM MỚI: 2 bảng riêng — clean và quarantine
-SNOWFLAKE_TABLE_BRONZE     = os.getenv("SNOWFLAKE_TABLE", "spotify_events_bronze")
+SNOWFLAKE_TABLE = os.getenv("SNOWFLAKE_TABLE")
 #Tên của cái Bảng (Table) cụ thể chứa dữ liệu – nơi có các hàng và các cột.
-SNOWFLAKE_TABLE_QUARANTINE = "spotify_events_quarantine"
-# bảng chứa dữ liệu bẩn bị reject kèm lý do
 
 # ---------------LOCAL FILE PATH ------------------
 
-LOCAL_TEMP_PATH           = os.getenv("LOCAL_TEMP_PATH", "/tmp/spotify_raw.json")
-LOCAL_TEMP_QUARANTINE     = "/tmp/spotify_quarantine.json"
+LOCAL_TEMP_PATH = os.getenv("LOCAL_TEMP_PATH", "/tmp/spotify_raw.json")
 # đóng vai trò như 1 trạm trung chuyển trong quá trình
 # chuyển dữ liệu từ Minio sng Snowflake
 # LOCAL_TEMP_PATH: Code sẽ ngó vào file .env xem bạn cấu hình đường dẫn cụ thể nà không
@@ -86,30 +78,30 @@ LOCAL_TEMP_QUARANTINE     = "/tmp/spotify_quarantine.json"
 #--------------PYTHON TASKS FUNCTIONS-------------
 #------------------------------------------------
 
-# ✅ THÊM MỚI: helper dùng chung để đọc file từ MinIO
-# tránh lặp code giữa extract_clean và extract_quarantine
-def read_from_minio(prefix: str, local_path: str) -> str:
+# vào mino quét sacjk các file dữ liệu thô .json
+# mà kafka ném vào đó, gộp chúng lại thaanfh một file duy nhất roiof tai ve airflow
+def extract_from_minio(): #khai thác truy xuất
+    """
+
+    Extract all .json event files from MINIO -> combine -> save locallu
+    :return:
+    """
     s3 = boto3.client(
         "s3", # tạo 1 thực thể client sử dụng giao thức S3
         endpoint_url=MINIO_ENDPOINT, # địa chỉ IP
         aws_access_key_id=MINIO_ACCESS_KEY,
         aws_secret_access_key=MINIO_SECRET_KEY
     )
-    response = s3.list_objects_v2(Bucket=MINIO_BUCKET, Prefix=prefix)
+    response = s3.list_objects_v2(Bucket = MINIO_BUCKET, Prefix = MINIO_PREFIX
+                                 )
     # đơn giản cái response là list các file .json đã tổng hợp
-    # lấy từ trong MINI_BUCKET , tại thư mục prefix
+    # lấy từ trong MINI_BUCKET , tại thư mục MINIO_PREFIX
     #
     # ví dụ trong bucket spotify có rất nhiều file json tổng hợp
     contents = response.get("Contents", [])
 
     #MINIO trả về danh sách chứa thông tin các file dã tìm thấy, nếu thư mục
     # rỗng thì hàm ,get() trả về mảng rỗng [] để code phía dưới không bị crash
-    if not contents:
-        print(f"⚠️  No files found in MinIO prefix: {prefix}")
-        with open(local_path, "w") as f:
-            json.dump([], f)
-        return local_path
-
     all_events = []
     # tạo một mảng trống python để chuẩn bị hứng dữ liệu gom được
 
@@ -120,7 +112,7 @@ def read_from_minio(prefix: str, local_path: str) -> str:
             continue
 
         # -> tải về ram và bóc tách dữ liệu
-        data = s3.get_object(Bucket=MINIO_BUCKET, Key=key) # return binary
+        data = s3.get_object(Bucket=MINIO_BUCKET, Key = key) # return binary
         # thực hiện tải download nội dung  của file cụ thể đó từ MINIO vào bộ
         # nhớ cuẩ code dưới dạng dữ liệu nhị phân
         lines = data["Body"].read().decode("utf-8").splitlines()
@@ -132,47 +124,22 @@ def read_from_minio(prefix: str, local_path: str) -> str:
         #     '{"event_id": "f4f8653b...", "artist_name": "The Weekend", ...}'  # Phần tử 10
         # ]
         for line in lines:
+
             try:
                 all_events.append(json.loads(line))
                 # biến dòng chữ thô thành 1 object JSON Dic trong python
                 # sau ó ném cái object vào 1 cái rổ chung
             except json.JSONDecodeError: # lỗi Format JSON thì next
                 continue
-
-    with open(local_path, "w") as f:
+    with open(LOCAL_TEMP_PATH, "w") as f:
         json.dump(all_events, f)
         # ghi hết tất cả sự kiện all_event
-
-    print(f"✅ Extracted {len(all_events)} events from '{prefix}' → {local_path}")
-    return local_path
-
-
-# vào mino quét sacjk các file dữ liệu thô .json
-# mà kafka ném vào đó, gộp chúng lại thaanfh một file duy nhất roiof tai ve airflow
-def extract_from_minio(): #khai thác truy xuất
-    """
-    Extract all .json event files from MINIO -> combine -> save locally
-    ✅ THÊM MỚI: đọc từ bronze/clean/ thay vì bronze/ chung
-    :return:
-    """
-    return read_from_minio(MINIO_PREFIX_CLEAN, LOCAL_TEMP_PATH)
-# [Kafka] ──► [MinIO (Bronze/clean)] ──► [Hàm extract_from_minio()] ──► [LOCAL_TEMP_PATH]
-#                                                                              │
-#                                                                              ▼
-#                                                                         [Snowflake Bronze]
-
-
-# ✅ THÊM MỚI: hàm đọc dữ liệu bẩn từ bronze/quarantine/
-def extract_quarantine_from_minio():
-    """
-    Extract dirty/rejected events from MinIO quarantine → save locally
-    """
-    return read_from_minio(MINIO_PREFIX_QUARANTINE, LOCAL_TEMP_QUARANTINE)
-# [MinIO (Bronze/quarantine)] ──► [Hàm extract_quarantine()] ──► [LOCAL_TEMP_QUARANTINE]
-#                                                                         │
-#                                                                         ▼
-#                                                                [Snowflake Quarantine]
-
+    print(f"✅ Extracted {len(all_events)} events from MinIO and saved to {LOCAL_TEMP_PATH}")
+    return LOCAL_TEMP_PATH
+# [Kafka] ──► [MinIO (Bronze)] ──► [Hàm extract_from_minio()] ──► [LOCAL_TEMP_PATH] ◄── Bạn đang ở ĐÂY!
+#                                                                       │
+#                                                                       ▼ (Cần viết thêm hàm Load)
+#                                                                  [Snowflake]
 
 # nhiệm vụ
 # đọc file tạm chứa mở dữ liệu thu gom từ mINIo lên
@@ -185,12 +152,11 @@ def load_raw_to_snowflake(**context):
     """
     load raw data directly into Snowflake Bronze table
     No transformation or clleaning
-    ✅ THÊM MỚI: thêm các field mới từ Producer v2
     :param context:
     :return:
     """
 
-    file_path = context["ti"].xcom_pull(task_ids="extract_data")
+    file_path = context["ti"].xcom_pull(task_ids = "extract_data")
     # lấy vị trí file tmp
     # /tmp/spotify_raw.json
     with open(file_path, "r") as f:
@@ -200,7 +166,6 @@ def load_raw_to_snowflake(**context):
     if not events:
         print("No Events found to load.")
         return
-
     conn = snowflake.connector.connect(
         user=SNOWFLAKE_USER,
         password=SNOWFLAKE_PASSWORD,
@@ -213,55 +178,35 @@ def load_raw_to_snowflake(**context):
     cur = conn.cursor()
     # tạo con troeor để khi nào thực hiện query SQL bạn
     # phải dùng contror này thực thi
+    create_table_sql = f"""
+    CREATE TABLE IF NOT EXISTS {SNOWFLAKE_TABLE}(
+        event_id STRING,
+        user_id STRING,
+        song_id STRING,
+        artist_name STRING,
+        song_name STRING,
+        event_type STRING,
+        device_type STRING,
+        country STRING,
+        timestamp STRING
+
+    );
+    """
 
     cur.execute(f"USE DATABASE {SNOWFLAKE_DATABASE}")
     cur.execute(f"USE SCHEMA {SNOWFLAKE_SCHEMA}")
+    cur.execute(create_table_sql)
 
-    # ✅ THÊM MỚI: thêm các field mới vào CREATE TABLE
-    cur.execute(f"""
-        CREATE TABLE IF NOT EXISTS {SNOWFLAKE_TABLE_BRONZE} (
-            -- fields cũ
-            event_id    STRING,
-            user_id     STRING,
-            song_id     STRING,
-            artist_name STRING,
-            song_name   STRING,
-            event_type  STRING,
-            device_type STRING,
-            country     STRING,
-            timestamp   STRING,
-            -- ✅ fields mới: user info
-            username          STRING,
-            age               INTEGER,
-            subscription_type STRING,
-            registration_date STRING,
-            -- ✅ fields mới: song info
-            genre            STRING,
-            duration_seconds INTEGER,
-            release_year     INTEGER,
-            album_name       STRING
-        );
-    """)
-
-    # ✅ THÊM MỚI: insert thêm 8 field mới
     insert_sql = f"""
-        INSERT INTO {SNOWFLAKE_TABLE_BRONZE} (
+        INSERT INTO {SNOWFLAKE_TABLE}(
             event_id, user_id, song_id, artist_name, song_name,
-            event_type, device_type, country, timestamp,
-            username, age, subscription_type, registration_date,
-            genre, duration_seconds, release_year, album_name
+            event_type, device_type, country, timestamp
         )
-        VALUES (
-            %s, %s, %s, %s, %s,
-            %s, %s, %s, %s,
-            %s, %s, %s, %s,
-            %s, %s, %s, %s
-        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     for event in events:
         cur.execute(insert_sql, (
-            # fields cũ
             event.get("event_id"),
             event.get("user_id"),
             event.get("song_id"),
@@ -270,113 +215,18 @@ def load_raw_to_snowflake(**context):
             event.get("event_type"),
             event.get("device_type"),
             event.get("country"),
-            event.get("timestamp"),
-            # ✅ fields mới: user
-            event.get("username"),
-            event.get("age"),
-            event.get("subscription_type"),
-            event.get("registration_date"),
-            # ✅ fields mới: song
-            event.get("genre"),
-            event.get("duration_seconds"),
-            event.get("release_year"),
-            event.get("album_name"),
+            event.get("timestamp")
         ))
 
     conn.commit()
     cur.close()
     conn.close()
 
-    print(f"✅ Loaded {len(events)} raw records into Snowflake table: {SNOWFLAKE_TABLE_BRONZE}")
+    print(f"✅ Loaded {len(events)} raw records into Snowflake table: {SNOWFLAKE_TABLE}")
 # tác dụng của hàm
 # 1. Biến dữ liệu từ "Tạm thời" thành "Vĩnh viễn"
 #2. Biến dữ liệu từ dạng "Văn bản" (JSON) thành dạng "Bảng phân tích" (Structured SQL)
 #3. Đóng vai trò là Tầng "Bronze" (Dữ liệu thô - Raw Layer) trong kiến trúc Medallion
-
-
-# ✅ THÊM MỚI: hàm load dữ liệu bẩn vào bảng quarantine riêng
-def load_quarantine_to_snowflake(**context):
-    """
-    Load dirty/rejected events into Snowflake Quarantine table
-    Lưu kèm lý do reject để audit sau
-    """
-    file_path = context["ti"].xcom_pull(task_ids="extract_quarantine_data")
-    # lấy vị trí file tmp quarantine
-    with open(file_path, "r") as f:
-        events = json.load(f)
-    # Đọc file tạm dạng mảng JSON và biến thành Danh sách Object trong RAM
-
-    if not events:
-        print("✅ No quarantine events — data is clean!")
-        return
-
-    conn = snowflake.connector.connect(
-        user=SNOWFLAKE_USER,
-        password=SNOWFLAKE_PASSWORD,
-        account=SNOWFLAKE_ACCOUNT,
-        warehouse=SNOWFLAKE_WAREHOUSE,
-        database=SNOWFLAKE_DATABASE,
-        schema=SNOWFLAKE_SCHEMA
-    )
-
-    cur = conn.cursor()
-    # tạo con trỏ để khi nào thực hiện query SQL bạn
-    # phải dùng con trỏ này thực thi
-
-    cur.execute(f"USE DATABASE {SNOWFLAKE_DATABASE}")
-    cur.execute(f"USE SCHEMA {SNOWFLAKE_SCHEMA}")
-
-    cur.execute(f"""
-        CREATE TABLE IF NOT EXISTS {SNOWFLAKE_TABLE_QUARANTINE} (
-            event_id    STRING,
-            user_id     STRING,
-            song_id     STRING,
-            artist_name STRING,
-            song_name   STRING,
-            event_type  STRING,
-            device_type STRING,
-            country     STRING,
-            timestamp   STRING,
-            -- lý do bị reject (được gắn bởi kafka_to_minio.py hoặc spark_streaming)
-            _reject_reason STRING,
-            _rejected_at   STRING
-        );
-    """)
-
-    insert_sql = f"""
-        INSERT INTO {SNOWFLAKE_TABLE_QUARANTINE} (
-            event_id, user_id, song_id, artist_name, song_name,
-            event_type, device_type, country, timestamp,
-            _reject_reason, _rejected_at
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-
-    for event in events:
-        cur.execute(insert_sql, (
-            event.get("event_id"),
-            event.get("user_id"),
-            event.get("song_id"),
-            event.get("artist_name"),
-            event.get("song_name"),
-            event.get("event_type"),
-            event.get("device_type"),
-            event.get("country"),
-            event.get("timestamp"),
-            event.get("_reject_reason", "unknown"),
-            event.get("_rejected_at"),
-        ))
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    print(f"⚠️  Loaded {len(events)} quarantine records → Snowflake: {SNOWFLAKE_TABLE_QUARANTINE}")
-# tác dụng của hàm
-# 1. Lưu dữ liệu bẩn vĩnh viễn thay vì bỏ đi
-# 2. Kèm lý do reject để team data engineer audit sau
-# 3. Đóng vai trò Quarantine Layer trong kiến trúc Medallion
-
 
 #------------------------------------------------------------
 #-----------------AIRFLOW DAG DEFINITION----------------------
@@ -408,14 +258,14 @@ with DAG(
     # nhinf vào tên là biết nhiệm vụ của DAG
     default_args=default_args,
     #
-    description="load raw spotify events from MINIO to Snowflake Bronze + Quarantine tables",
+    description="load raw spotify events from MINIO to Snowflake Bronze table",
     schedule_interval="@hourly",
     catchup=False
 ) as dag:
     # bên trong DAG dùng PythonOperator - một công cụ
     # airflow chuyên dùng để bọc hàm python thuần túy
 
-    # gom dữ liệu sạch từ MINIO bronze/clean/
+    # gom dữ liệu vào một file từ MINIO
     extract_task = PythonOperator(
         task_id="extract_data",
         # tên của task1 trên giao diện đồ họa
@@ -423,17 +273,11 @@ with DAG(
         python_callable=extract_from_minio
         # chỉ định cho airflow biết khi bấm chạy Task này
         # hãy thực thi extract_from_minio
-    )
 
-    # ✅ THÊM MỚI: gom dữ liệu bẩn từ MINIO bronze/quarantine/
-    extract_quarantine_task = PythonOperator(
-        task_id="extract_quarantine_data",
-        python_callable=extract_quarantine_from_minio
     )
-
-    # gửi dữ liệu sạch lên Snowflake Bronze table
+    # gửi dữ liệu lên Snowflake
     load_task = PythonOperator(
-        task_id="load_raw_to_snow_flake",
+        task_id = "load_raw_to_snow_flake",
         # tên của task2
         python_callable=load_raw_to_snowflake,
         # chạy hàm nạp dữ liệu lên Snowflake
@@ -444,19 +288,7 @@ with DAG(
         # để từ đó xài được lệnh gọi XCom lấy đường dẫn file tạm.
     )
 
-    # ✅ THÊM MỚI: gửi dữ liệu bẩn lên Snowflake Quarantine table
-    load_quarantine_task = PythonOperator(
-        task_id="load_quarantine_to_snowflake",
-        python_callable=load_quarantine_to_snowflake,
-    )
+    extract_task >> load_task
+    # [extract_task] ───(Chạy thành công)───► [load_task]
 
-    # -------------------------------------------------------
-    # Thứ tự chạy — 2 nhánh song song, độc lập nhau:
-    #
-    # extract_task (clean)      ──► load_task (clean)
-    # extract_quarantine_task   ──► load_quarantine_task
-    #
-    # nhánh quarantine lỗi KHÔNG ảnh hưởng nhánh clean
-    # -------------------------------------------------------
-    extract_task            >> load_task
-    extract_quarantine_task >> load_quarantine_task
+    #extract thành công thì mới có load

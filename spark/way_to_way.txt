@@ -1,0 +1,194 @@
+Cách làm Bước 2 chi tiết
+Bước 2.1 — Thêm Spark vào docker-compose (10 phút)
+Thêm 2 service vào docker-compose.yml:
+yamlspark-master:
+  image: bitnami/spark:3.5
+  container_name: spark-master
+  environment:
+    - SPARK_MODE=master
+    - SPARK_RPC_AUTHENTICATION_ENABLED=no
+    - SPARK_RPC_ENCRYPTION_ENABLED=no
+  ports:
+    - "8090:8080"   # Spark Master UI
+    - "7077:7077"   # Spark master port
+  mem_limit: 1g
+
+spark-worker:
+  image: bitnami/spark:3.5
+  container_name: spark-worker
+  depends_on:
+    - spark-master
+  environment:
+    - SPARK_MODE=worker
+    - SPARK_MASTER_URL=spark://spark-master:7077
+    - SPARK_WORKER_MEMORY=1G
+    - SPARK_WORKER_CORES=2
+  ports:
+    - "8091:8081"   # Spark Worker UI
+  mem_limit: 2g
+
+Bước 2.2 — Tạo file spark_streaming_job.py (core)
+project/
+├── spark/
+│   └── spark_streaming_job.py   ← tạo file này
+├── producer.py
+├── kafka_to_minio.py            ← giữ lại làm fallback
+└── docker-compose.yml
+File này làm 4 việc theo thứ tự:
+1. Kết nối Kafka (readStream)
+        ↓
+2. Parse JSON + validate schema
+        ↓
+3. Tách clean / dirty (filter)
+        ↓
+4. Ghi xuống MinIO (writeStream)
+   ├── bronze/clean/
+   └── bronze/quarantine/
+
+Bước 2.3 — Giải thích từng đoạn code
+Phần 1 — Tạo SparkSession:
+pythonspark = SparkSession.builder \
+    .appName("SpotifyStreaming") \
+    .config("spark.jars.packages",
+        # JAR để đọc Kafka
+        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,"
+        # JAR để ghi MinIO (S3)
+        "org.apache.hadoop:hadoop-aws:3.3.4,"
+        "com.amazonaws:aws-java-sdk-bundle:1.12.262"
+    ) \
+    # Kết nối MinIO như S3
+    .config("spark.hadoop.fs.s3a.endpoint",          "http://minio:9000") \
+    .config("spark.hadoop.fs.s3a.access.key",        MINIO_ACCESS_KEY) \
+    .config("spark.hadoop.fs.s3a.secret.key",        MINIO_SECRET_KEY) \
+    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.fs.s3a.impl",
+            "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .getOrCreate()
+
+spark.sparkContext.setLogLevel("WARN")
+# tắt log rác, chỉ hiện WARN trở lên
+Phần 2 — Khai báo schema (quan trọng nhất):
+python# Khai báo đúng kiểu dữ liệu từng field
+# Nếu Kafka gửi sai kiểu → Spark tự đưa vào cột _corrupt_record
+schema = StructType([
+    StructField("event_id",          StringType(),  True),
+    StructField("user_id",           StringType(),  True),
+    StructField("song_id",           StringType(),  True),
+    StructField("artist_name",       StringType(),  True),
+    StructField("song_name",         StringType(),  True),
+    StructField("event_type",        StringType(),  True),
+    StructField("device_type",       StringType(),  True),
+    StructField("country",           StringType(),  True),
+    StructField("timestamp",         StringType(),  True),
+    # fields mới
+    StructField("username",          StringType(),  True),
+    StructField("age",               IntegerType(), True),
+    StructField("subscription_type", StringType(),  True),
+    StructField("registration_date", StringType(),  True),
+    StructField("genre",             StringType(),  True),
+    StructField("duration_seconds",  IntegerType(), True),
+    StructField("release_year",      IntegerType(), True),
+    StructField("album_name",        StringType(),  True),
+])
+Phần 3 — Đọc stream từ Kafka:
+pythonraw_df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "kafka:9092") \
+    .option("subscribe", "spotify-events") \
+    .option("startingOffsets", "earliest") \
+    .option("failOnDataLoss", "false") \
+    .load()
+
+# Kafka trả về binary → parse thành JSON theo schema
+parsed_df = raw_df.select(
+    from_json(
+        col("value").cast("string"),
+        schema
+    ).alias("data"),
+    col("timestamp").alias("kafka_timestamp")
+).select("data.*", "kafka_timestamp") \
+ .withColumn("processed_at", current_timestamp())
+Phần 4 — Tách clean / dirty:
+python# Điều kiện dữ liệu sạch
+clean_condition = (
+    col("event_id").isNotNull() &
+    col("user_id").isNotNull()  &
+    col("song_id").isNotNull()  &
+    col("timestamp").isNotNull()
+)
+
+clean_df = parsed_df.filter(clean_condition)
+
+# Dữ liệu bẩn + gắn lý do
+dirty_df = parsed_df.filter(~clean_condition) \
+    .withColumn("_reject_reason",
+        when(col("event_id").isNull(),  lit("missing_event_id"))
+       .when(col("user_id").isNull(),   lit("missing_user_id"))
+       .when(col("song_id").isNull(),   lit("missing_song_id"))
+       .when(col("timestamp").isNull(), lit("missing_timestamp"))
+       .otherwise(lit("unknown"))
+    ) \
+    .withColumn("_rejected_at", current_timestamp().cast("string"))
+Phần 5 — Ghi xuống MinIO:
+python# Ghi clean stream
+clean_query = clean_df.writeStream \
+    .format("json") \
+    .option("path",              "s3a://your-bucket/bronze/clean/") \
+    .option("checkpointLocation","s3a://your-bucket/checkpoint/clean/") \
+    .partitionBy("country") \
+    # partition theo country → query nhanh hơn trong dbt
+    .outputMode("append") \
+    .trigger(processingTime="30 seconds") \
+    # cứ 30 giây xử lý 1 micro-batch
+    .start()
+
+# Ghi dirty stream
+dirty_query = dirty_df.writeStream \
+    .format("json") \
+    .option("path",              "s3a://your-bucket/bronze/quarantine/") \
+    .option("checkpointLocation","s3a://your-bucket/checkpoint/quarantine/") \
+    .outputMode("append") \
+    .trigger(processingTime="30 seconds") \
+    .start()
+
+# Giữ 2 stream chạy mãi
+spark.streams.awaitAnyTermination()
+
+Bước 2.4 — Chạy Spark job
+Có 2 cách chạy:
+Cách 1 — Submit từ terminal:
+bashdocker exec spark-master spark-submit \
+  --master spark://spark-master:7077 \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,\
+org.apache.hadoop:hadoop-aws:3.3.4 \
+  /path/to/spark_streaming_job.py
+Cách 2 — Thêm vào docker-compose chạy tự động:
+yamlspark-streaming:
+  image: bitnami/spark:3.5
+  container_name: spark-streaming
+  depends_on:
+    - spark-master
+    - kafka
+    - minio
+  volumes:
+    - ./spark:/opt/spark-jobs
+  command: >
+    spark-submit
+    --master spark://spark-master:7077
+    --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.apache.hadoop:hadoop-aws:3.3.4
+    /opt/spark-jobs/spark_streaming_job.py
+  mem_limit: 1g
+
+Bước 2.5 — Kiểm tra hoạt động
+Spark Master UI : http://localhost:8090  → thấy 1 application đang chạy
+Spark Worker UI : http://localhost:8091  → thấy memory/CPU đang dùng
+MinIO UI        : http://localhost:9001  → thấy file xuất hiện trong bronze/clean/
+
+Tóm tắt thứ tự làm
+□ 2.1 Thêm spark-master + spark-worker vào docker-compose
+□ 2.2 Tạo thư mục spark/ và file spark_streaming_job.py
+□ 2.3 Điền MINIO_ACCESS_KEY, MINIO_SECRET_KEY, bucket name vào config
+□ 2.4 docker-compose up spark-master spark-worker
+□ 2.5 Submit job và kiểm tra Spark UI + MinIO UI
+□ 2.6 Tắt kafka_to_minio.py (Consumer Python cũ)
+Bạn muốn mình viết file spark_streaming_job.py hoàn chỉnh luôn không?

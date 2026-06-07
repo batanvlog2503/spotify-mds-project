@@ -1,0 +1,8 @@
+1. Xóa schema cũ trước khi thêm field mới
+
+USE DATABASE SPOTIFY_DB;
+USE SCHEMA BRONZE;
+
+-- Xóa toàn bộ data, giữ lại bảng rỗng
+TRUNCATE TABLE spotify_events_bronze;
+DROP TABLE IF EXISTS SPOTIFY_EVENTS_BRONZE;
