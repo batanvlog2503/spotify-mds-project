@@ -15,3 +15,13 @@
 [2026-06-07T03:54:15.948+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
 [2026-06-07T03:54:16.056+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
 [2026-06-07T03:54:16.743+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
+[2026-06-07T07:35:31.944+0000] {cursor.py:1149} INFO - Number of results in first chunk: 1
+[2026-06-07T07:35:32.052+0000] {connection.py:773} INFO - closed
+[2026-06-07T07:35:32.130+0000] {connection.py:779} INFO - No async queries seem to be running, deleting session
+[2026-06-07T07:35:32.244+0000] {logging_mixin.py:188} INFO - ✅ Loaded 4282 raw records into Snowflake table: SPOTIFY_EVENTS_BRONZE
+[2026-06-07T07:35:32.267+0000] {python.py:237} INFO - Done. Returned value was: None
+[2026-06-07T07:35:32.281+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-06-07T07:35:32.754+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=spotify_minio_to_snowflake_bronze, task_id=load_raw_to_snow_flake, run_id=manual__2026-06-07T03:54:04.828753+00:00, execution_date=20260607T035404, start_date=20260607T035414, end_date=20260607T073532
+[2026-06-07T07:35:33.120+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2026-06-07T07:35:33.503+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-06-07T07:35:33.517+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

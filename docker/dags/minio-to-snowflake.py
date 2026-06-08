@@ -5,6 +5,7 @@ from airflow import DAG
 # dùng đêr khai báo 1 pipeline tự động
 # quy định khi nào pipeline này chạy
 from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 import boto3
 # để đọc được cái dữ liệu từ MINIO
 import snowflake.connector
@@ -449,7 +450,11 @@ with DAG(
         task_id="load_quarantine_to_snowflake",
         python_callable=load_quarantine_to_snowflake,
     )
-
+    # ✅ THÊM MỚI: train model Prophet + log vào MLflow
+    train_ml_task = BashOperator(
+        task_id="train_forecast_model",
+        bash_command="python /opt/airflow/scripts/train_forecast.py"
+    )
     # -------------------------------------------------------
     # Thứ tự chạy — 2 nhánh song song, độc lập nhau:
     #
@@ -458,5 +463,6 @@ with DAG(
     #
     # nhánh quarantine lỗi KHÔNG ảnh hưởng nhánh clean
     # -------------------------------------------------------
-    extract_task            >> load_task
+    # ✅ Sửa — gộp lại gọn hơn
+    extract_task >> load_task >> train_ml_task
     extract_quarantine_task >> load_quarantine_task

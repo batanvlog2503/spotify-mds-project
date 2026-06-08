@@ -1,0 +1,157 @@
+Show more
+14:43
+Bước 4 chia làm 3 chỗ cần thêm:
+
+Chỗ 1 — docker-compose.yml
+Thêm service MLflow vào cuối phần services, trước dòng volumes::
+
+yaml
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db
+    mem_limit: 512m
+
+volumes:
+  postgres_data:
+Chỗ 2 — Tạo file scripts/train_forecast.py
+project/
+├── dags/
+├── spark/
+├── simulator/
+├── scripts/              ← tạo thư mục này
+│   └── train_forecast.py ← tạo file này
+└── docker-compose.yml
+Nội dung file đầy đủ:
+
+python
+import mlflow
+import mlflow.prophet
+import pandas as pd
+from prophet import Prophet
+import snowflake.connector
+import os
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path="/opt/airflow/dags/.env")
+
+# Kết nối MLflow — dùng localhost khi chạy local
+# dùng http://mlflow:5000 khi chạy trong Docker
+mlflow.set_tracking_uri(os.getenv("MLFLOW_URI", "http://localhost:5000"))
+mlflow.set_experiment("spotify_song_forecast")
+
+# Kết nối Snowflake
+conn = snowflake.connector.connect(
+    user=os.getenv("SNOWFLAKE_USER"),
+    password=os.getenv("SNOWFLAKE_PASSWORD"),
+    account=os.getenv("SNOWFLAKE_ACCOUNT"),
+    warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),
+    database=os.getenv("SNOWFLAKE_DATABASE"),
+    schema="TRANSFORM"
+)
+
+# Đọc từ Gold table
+df = pd.read_sql("""
+    SELECT
+        DATE_TRUNC('day', event_ts) AS ds,
+        COUNT(CASE WHEN event_type = 'play' THEN 1 END) AS y
+    FROM spotify_silver
+    GROUP BY DATE_TRUNC('day', event_ts)
+    ORDER BY ds
+""", conn)
+
+conn.close()
+
+print(f"✅ Loaded {len(df)} days of data")
+print(df.tail(5))
+
+if len(df) < 2:
+    print("⚠️  Không đủ data để train model (cần ít nhất 2 ngày)")
+    exit(0)
+
+# Train model và log vào MLflow
+with mlflow.start_run():
+    model = Prophet(
+        yearly_seasonality=False,  # data chưa đủ 1 năm
+        weekly_seasonality=True,
+        daily_seasonality=True
+    )
+    model.fit(df)
+
+    # Dự báo 7 ngày tới
+    future   = model.make_future_dataframe(periods=7)
+    forecast = model.predict(future)
+
+    # Tính MAE trên data đã có
+    merged = forecast[['ds', 'yhat']].merge(df, on='ds')
+    mae    = (merged['yhat'] - merged['y']).abs().mean()
+    rmse   = ((merged['yhat'] - merged['y']) ** 2).mean() ** 0.5
+
+    # Log vào MLflow
+    mlflow.log_metric("mae",  round(mae,  2))
+    mlflow.log_metric("rmse", round(rmse, 2))
+    mlflow.log_param("forecast_periods",    7)
+    mlflow.log_param("weekly_seasonality",  True)
+    mlflow.log_param("daily_seasonality",   True)
+    mlflow.prophet.log_model(model, "prophet_model")
+
+    print(f"✅ MAE  : {mae:.2f}")
+    print(f"✅ RMSE : {rmse:.2f}")
+    print("✅ Model logged to MLflow")
+Chỗ 3 — Thêm task vào Airflow DAG
+Mở file dags/minio_to_snowflake_dag.py, thêm vào 3 chỗ:
+
+Chỗ 3a — Thêm import ở đầu file:
+
+python
+from airflow.operators.bash import BashOperator
+Chỗ 3b — Thêm task MLflow sau các task cũ:
+
+python
+# ✅ THÊM MỚI: train model Prophet + log vào MLflow
+train_ml_task = BashOperator(
+    task_id="train_forecast_model",
+    bash_command="python /opt/airflow/scripts/train_forecast.py"
+)
+Chỗ 3c — Cập nhật thứ tự chạy:
+
+python
+# Thứ tự cũ
+extract_task            >> load_task
+extract_quarantine_task >> load_quarantine_task
+
+# ✅ Thứ tự mới — train ML sau khi load xong
+extract_task            >> load_task            >> train_ml_task
+extract_quarantine_task >> load_quarantine_task
+Thêm vào dags/.env
+bash
+# MLflow
+MLFLOW_URI=http://mlflow:5000
+Thêm volume cho scripts trong docker-compose.yml
+Airflow cần mount thư mục scripts/ để chạy được train_forecast.py:
+
+yaml
+airflow-webserver:
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./scripts:/opt/airflow/scripts   # ✅ thêm dòng này
+
+airflow-scheduler:
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./scripts:/opt/airflow/scripts   # ✅ thêm dòng này
+Thứ tự làm
+□ 1. Thêm mlflow service vào docker-compose.yml
+□ 2. Thêm volumes scripts/ vào airflow-webserver + airflow-scheduler
+□ 3. docker-compose up mlflow
+□ 4. Tạo thư mục scripts/ và file train_forecast.py
+□ 5. Thêm import + task vào Airflow DAG
+□ 6. Thêm MLFLOW_URI vào dags/.env
+□ 7. Trigger DAG → kiểm tra http://localhost:5000
+Bạn muốn mình xuất file train_forecast.py hoàn chỉnh không?

@@ -1,0 +1,7 @@
+project/
+├── dags/
+├── spark/
+├── simulator/
+├── scripts/              ← tạo thư mục này
+│   └── train_forecast.py ← tạo file này
+└── docker-compose.yml
