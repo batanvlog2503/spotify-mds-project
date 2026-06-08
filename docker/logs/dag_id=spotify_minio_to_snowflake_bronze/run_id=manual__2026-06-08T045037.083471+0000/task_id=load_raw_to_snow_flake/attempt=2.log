@@ -12,3 +12,10 @@
 [2026-06-08T12:45:41.455+0000] {taskinstance.py:430} INFO - ::endgroup::
 [2026-06-08T12:45:42.148+0000] {connection.py:638} INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.12.4, Platform: Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.36
 [2026-06-08T12:45:42.149+0000] {connection.py:1760} INFO - Connecting to GLOBAL Snowflake domain
+[2026-06-08T15:20:17.295+0000] {logging_mixin.py:188} INFO - ✅ Loaded 10935 raw records into Snowflake table: SPOTIFY_EVENTS_BRONZE
+[2026-06-08T15:20:17.976+0000] {python.py:237} INFO - Done. Returned value was: None
+[2026-06-08T15:20:17.985+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-06-08T15:20:18.308+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=spotify_minio_to_snowflake_bronze, task_id=load_raw_to_snow_flake, run_id=manual__2026-06-08T04:50:37.083471+00:00, execution_date=20260608T045037, start_date=20260608T124541, end_date=20260608T152018
+[2026-06-08T15:20:18.664+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2026-06-08T15:20:19.047+0000] {taskinstance.py:3503} INFO - 1 downstream tasks scheduled from follow-on schedule check
+[2026-06-08T15:20:19.050+0000] {local_task_job_runner.py:222} INFO - ::endgroup::
