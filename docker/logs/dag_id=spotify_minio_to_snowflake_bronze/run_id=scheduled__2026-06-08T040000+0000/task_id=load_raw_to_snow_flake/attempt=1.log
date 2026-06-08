@@ -1,0 +1,9 @@
+[2026-06-08T05:01:20.640+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-06-08T05:01:20.666+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.load_raw_to_snow_flake scheduled__2026-06-08T04:00:00+00:00 [queued]>
+[2026-06-08T05:01:20.676+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.load_raw_to_snow_flake scheduled__2026-06-08T04:00:00+00:00 [queued]>
+[2026-06-08T05:01:20.677+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 2
+[2026-06-08T05:01:20.691+0000] {taskinstance.py:2330} INFO - Executing <Task(PythonOperator): load_raw_to_snow_flake> on 2026-06-08 04:00:00+00:00
+[2026-06-08T05:01:20.699+0000] {standard_task_runner.py:90} INFO - Running: ['***', 'tasks', 'run', 'spotify_minio_to_snowflake_bronze', 'load_raw_to_snow_flake', 'scheduled__2026-06-08T04:00:00+00:00', '--job-id', '104', '--raw', '--subdir', 'DAGS_FOLDER/minio-to-snowflake.py', '--cfg-path', '/tmp/tmpf4_pj7ug']
+[2026-06-08T05:01:20.703+0000] {logging_mixin.py:188} WARNING - /home/***/.local/lib/python3.12/site-packages/***/task/task_runner/standard_task_runner.py:62 DeprecationWarning: This process (pid=109) is multi-threaded, use of fork() may lead to deadlocks in the child.
+[2026-06-08T05:01:20.704+0000] {standard_task_runner.py:91} INFO - Job 104: Subtask load_raw_to_snow_flake
+[2026-06-08T05:01:20.704+0000] {standard_task_runner.py:64} INFO - Started process 131 to run task

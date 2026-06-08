@@ -1,0 +1,19 @@
+[2026-06-08T04:58:08.014+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-06-08T04:58:08.036+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.extract_quarantine_data manual__2026-06-08T04:50:37.083471+00:00 [queued]>
+[2026-06-08T04:58:08.043+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: spotify_minio_to_snowflake_bronze.extract_quarantine_data manual__2026-06-08T04:50:37.083471+00:00 [queued]>
+[2026-06-08T04:58:08.044+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 2
+[2026-06-08T04:58:08.054+0000] {taskinstance.py:2330} INFO - Executing <Task(PythonOperator): extract_quarantine_data> on 2026-06-08 04:50:37.083471+00:00
+[2026-06-08T04:58:08.062+0000] {standard_task_runner.py:90} INFO - Running: ['***', 'tasks', 'run', 'spotify_minio_to_snowflake_bronze', 'extract_quarantine_data', 'manual__2026-06-08T04:50:37.083471+00:00', '--job-id', '89', '--raw', '--subdir', 'DAGS_FOLDER/minio-to-snowflake.py', '--cfg-path', '/tmp/tmp0gl60vov']
+[2026-06-08T04:58:08.065+0000] {logging_mixin.py:188} WARNING - /home/***/.local/lib/python3.12/site-packages/***/task/task_runner/standard_task_runner.py:62 DeprecationWarning: This process (pid=93) is multi-threaded, use of fork() may lead to deadlocks in the child.
+[2026-06-08T04:58:08.065+0000] {standard_task_runner.py:91} INFO - Job 89: Subtask extract_quarantine_data
+[2026-06-08T04:58:08.066+0000] {standard_task_runner.py:64} INFO - Started process 115 to run task
+[2026-06-08T04:58:08.129+0000] {task_command.py:426} INFO - Running <TaskInstance: spotify_minio_to_snowflake_bronze.extract_quarantine_data manual__2026-06-08T04:50:37.083471+00:00 [running]> on host 1b98f89b031b
+[2026-06-08T04:58:08.214+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='spotify_minio_to_snowflake_bronze' AIRFLOW_CTX_TASK_ID='extract_quarantine_data' AIRFLOW_CTX_EXECUTION_DATE='2026-06-08T04:50:37.083471+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-06-08T04:50:37.083471+00:00'
+[2026-06-08T04:58:08.215+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-06-08T04:58:09.628+0000] {logging_mixin.py:188} INFO - ✅ Extracted 0 events from 'bronze/quarantine/' → /tmp/spotify_quarantine.json
+[2026-06-08T04:58:09.629+0000] {python.py:237} INFO - Done. Returned value was: /tmp/spotify_quarantine.json
+[2026-06-08T04:58:09.630+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-06-08T04:58:09.650+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=spotify_minio_to_snowflake_bronze, task_id=extract_quarantine_data, run_id=manual__2026-06-08T04:50:37.083471+00:00, execution_date=20260608T045037, start_date=20260608T045808, end_date=20260608T045809
+[2026-06-08T04:58:09.690+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2026-06-08T04:58:09.711+0000] {taskinstance.py:3503} INFO - 1 downstream tasks scheduled from follow-on schedule check
+[2026-06-08T04:58:09.716+0000] {local_task_job_runner.py:222} INFO - ::endgroup::
