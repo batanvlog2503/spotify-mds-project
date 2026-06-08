@@ -1,0 +1,15 @@
+docker exec airflow-scheduler python -m pip install prophet mlflow pandas
+
+docker exec airflow-webserver python -m pip install prophet mlflow pandas
+
+http://localhost:8080
+→ DAG: spotify_minio_to_snowflake_bronze
+→ Bấm nút ▶ Trigger DAG
+
+docker compose -f docker-compose.yml up airflow-scheduler airflow-webserver -d --force-recreate
+
+docker exec airflow-scheduler python -m pip install mlflow prophet pandas snowflake-connector-python
+
+docker exec airflow-scheduler python /opt/airflow/scripts/train_forecast.py
+
+docker exec airflow-scheduler python -m pip install matplotlib
